@@ -8,7 +8,7 @@
 using namespace Simuro;
 using namespace Adapter;
 JudgeType whichType;
-const double PI = 3.1415926333;
+const double PI = 3.1415926;
 
 
 void Position(Robot* robot, double x, double y);
