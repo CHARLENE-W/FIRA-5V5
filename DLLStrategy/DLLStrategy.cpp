@@ -15,7 +15,7 @@ void Position(Robot* robot, double x, double y);
 void attack(int robot1, int robot2, int robot3, Field* field);
 void Velocity(Robot* robot, int vl, int vr);
 int pos(Vector2 pos);
-
+void dirShoot(Environment* env, int id);
 
 void OnEvent(EventType type, void* argument) {
 	SendLog(L"V/DLLStrategy:OnEvent()");
@@ -205,3 +205,82 @@ int pos(Vector2 pos) {
 double dis(Vector2 p1, Vector2 p2) {
 	return (p1.x-p2.x)*(p2.x-p2.x)+
  }
+
+
+
+void dirShoot(Environment* env, int id) {
+	//还锁
+	if (env->home[id].pos.x < env->currentBall.pos.x) {
+		dirShootLock[id] = 0;
+		double dy = env->home[id].pos.y > env->currentBall.pos.y ? 3.0 : -3.0;
+		dy += env->currentBall.pos.y;
+		if (dy > FTOP - 1.0) {
+			dy = FTOP - 1.0;
+		}
+		if (dy < FBOT + 1.0) {
+			dy = FBOT + 1.0;
+		}
+		go(&(env->home[id]), id, env->currentBall.pos.x, dy);
+		return;
+	}
+	if (Distance(env->home[id].pos, env->currentBall.pos) > 15.0) {
+		//注意dist的值不能小于自己设的那个延长距离
+		dirShootLock[id] = 0;
+	}
+
+	//射门
+	if (dirShootLock[id]) {
+		//go(&(env->home[id]), id, dirShootPos[id].x, dirShootPos[id].y);
+		double x = (dirShootPos[id].x - env->currentBall.pos.x) * 0.3 + env->currentBall.pos.x;
+		double y = (dirShootPos[id].y - env->currentBall.pos.y) * 0.3 + env->currentBall.pos.y;
+		//Position(&(env->home[id]), x, y);
+		go(&(env->home[id]), id, x, y);
+		//还锁
+
+		return;
+	}
+
+	dirShootLock[id] = 0;
+	//简单判断
+	double tx = env->currentBall.pos.x + 10.0, ty;
+	ty = F((env->goalBounds.bottom - env->currentBall.pos.y) / (env->goalBounds.left - env->currentBall.pos.x),
+		env->currentBall.pos.x, env->currentBall.pos.y, tx);
+
+	dirShootPos[id] = { env->fieldBounds.left * 1.0, env->goalBounds.bottom * 1.0, 0 };
+	//if (env->opponent[0].pos.y > MID) {
+	//	//守门员在上面
+	//	ty = F((env->goalBounds.bottom - env->currentBall.pos.y) / (env->goalBounds.left - env->currentBall.pos.x),
+	//		env->currentBall.pos.x, env->currentBall.pos.y, tx);
+	//}
+	//else {
+	//	//守门员在下面
+	//	ty = F((env->goalBounds.top - env->currentBall.pos.y) / (env->goalBounds.left - env->currentBall.pos.x),
+	//		env->currentBall.pos.x, env->currentBall.pos.y, tx);
+	//}
+
+	//防止溢出
+	if (ty > env->fieldBounds.top - 5.0 || ty < env->fieldBounds.bottom + 5.0) {
+		Position(&(env->home[id]), env->currentBall.pos.x, env->currentBall.pos.x);
+		return;
+	}
+
+	//do shooting
+
+	double dist = distance(tx, env->home[id].pos.x, ty, env->home[id].pos.y);
+	if (dist < 1.0) {
+		dirShootLock[id] = 1;
+		//Velocity(&(env->home[id]), 0, 0);
+		//RotateTo(&(env->home[id]), id, dirShootPos[id].x, dirShootPos[id].y);
+		//Position(&(env->home[id]), dirShootPos[id].x, dirShootPos[id].y);
+		double x = (dirShootPos[id].x - env->currentBall.pos.x) * 0.3 + env->currentBall.pos.x;
+		double y = (dirShootPos[id].y - env->currentBall.pos.y) * 0.3 + env->currentBall.pos.y;
+		go(&(env->home[id]), id, x, y);
+	}
+	else if (dist < 6.0) {
+		Velocity(&(env->home[id]), 10, 10);
+	}
+	else {
+		Position(&(env->home[id]), tx, ty);
+	}
+
+}
