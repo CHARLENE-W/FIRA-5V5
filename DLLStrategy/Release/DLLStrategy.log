@@ -1,0 +1,9 @@
+﻿  stdafx.cpp
+  dllmain.cpp
+  DLLStrategy.cpp
+    正在创建库 D:\robot\DLLStrategy-master\Release\DLLStrategy.lib 和对象 D:\robot\DLLStrategy-master\Release\DLLStrategy.exp
+  正在生成代码
+  Previous IPDB not found, fall back to full compilation.
+  All 81 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+  已完成代码的生成
+  DLLStrategy.vcxproj -> D:\robot\DLLStrategy-master\Release\DLLStrategy.dll
