@@ -1,0 +1,6 @@
+LIBRARY
+EXPORTS
+OnEvent
+GetTeamInfo
+GetInstruction
+GetPlacement
