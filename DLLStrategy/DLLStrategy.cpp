@@ -14,7 +14,7 @@ const double PI = 3.1415926;
 void Position(Robot* robot, double x, double y);
 void attack(int robot1, int robot2, int robot3, Field* field);
 void Velocity(Robot* robot, int vl, int vr);
-
+int pos(Vector2 pos);
 
 
 void OnEvent(EventType type, void* argument) {
@@ -66,7 +66,7 @@ void OnEvent(EventType type, void* argument) {
 
 void GetTeamInfo(TeamInfo* teamInfo) {
 	SendLog(L"V/DLLStrategy:GetTeamInfo()");
-	static const wchar_t teamName[] = L"TEST 2";
+	static const wchar_t teamName[] = L"TEST 3";
 	static constexpr size_t len = sizeof(teamName);
 	memcpy(teamInfo->teamName, teamName, len);
 }
@@ -110,11 +110,21 @@ void GetPlacement(Field* field) {
 }
 
 void attack(int robot1, int robot2, int robot3,Field* field) {
-
-	Position(&field->selfRobots[3], field->ball.position.x,field->ball.position.y);
-	Position(&field->selfRobots[4], field->ball.position.x, field->ball.position.y);
-
-
+	//球在对方半场
+	int low, middle, most;
+	
+	if (field->ball.position.x < 0) {
+		switch (pos(field->ball.position))
+		{
+		case 1: {
+			
+		}
+		case 2:
+		case 3:
+		default:
+			break;
+		}
+	}
 
 }
 void Position(Robot* robot, double x, double y)
@@ -185,3 +195,13 @@ void Velocity(Robot* robot, int vl, int vr) {
 	robot->wheel.leftSpeed = vl;
 	robot->wheel.rightSpeed = vr;
 }
+int pos(Vector2 pos) {
+	if (pos.x < -60) {
+		if (pos.y > 50) return 1;
+		if (pos.y < -50) return 2;
+	}
+	return 3;
+}
+double dis(Vector2 p1, Vector2 p2) {
+	return (p1.x-p2.x)*(p2.x-p2.x)+
+ }
