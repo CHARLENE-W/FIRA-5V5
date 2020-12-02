@@ -55,7 +55,7 @@ void OnEvent(EventType type, void* argument) {
 
 void GetTeamInfo(TeamInfo* teamInfo) {
 	SendLog(L"V/DLLStrategy:GetTeamInfo()");
-	static const wchar_t teamName[] = L"公诚勇毅，永矢毋忘";
+	static const wchar_t teamName[] = L"TEST DEMO DEBUG";
 	static constexpr size_t len = sizeof(teamName);
 	memcpy(teamInfo->teamName, teamName, len);
 }
