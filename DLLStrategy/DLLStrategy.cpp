@@ -48,6 +48,8 @@ void avoidance(Field* field, int id);
 //计算用
 double Atan(double y, double x);
 double Atan(Vector2 begin, Vector2 end);
+void RegulateAng180(double& ang);
+void RegulateAng360(double& ang);
 double Distance(Vector2 p1, Vector2 p2);
 double Distance(double x1, double x2, double y1, double y2);
 void PredictBall2(double s, Field* field);
@@ -62,6 +64,7 @@ double RotateTo(Robot* robot, int rID, const double desX, const double desY);
 void to(Robot* robot, int RID, double x, double y);
 void go(Robot* robot, int rID, const double x, const double y);
 void Position(Robot* robot, double x, double y);
+void PositionPro(Robot* robot, double x, double y);
 void RightWing(Field* pEnv, int id);
 /*ADD*/
 
@@ -187,6 +190,27 @@ double Atan(Vector2 begin, Vector2 end)
 	x = end.x - begin.x;
 	return Atan(y, x);
 }
+void RegulateAng180(double& ang)
+{
+	//规范角到(-180， 180]
+	while (ang <= -180) {
+		ang += 360;
+	}
+	while (ang > 180) {
+		ang -= 360;
+	}
+}
+void RegulateAng360(double& ang)
+{
+	//规范角到[0， 360)
+	while (ang < 0) {
+		ang += 360;
+	}
+	while (ang >= 360) {
+		ang -= 360;
+	}
+}
+
 double Distance(Vector2 p1, Vector2 p2) {
 	return sqrt((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y));
 }
@@ -483,6 +507,18 @@ void Position(Robot* robot, double x, double y)
 
 	Velocity(robot, vl, vr);
 }
+void PositionPro(Robot* robot, int id, double x, double y) {
+	double tAng = Atan(y - robot->position.y, x - robot->position.x);
+	double da = tAng - robot->rotation;
+	RegulateAng180(da);
+	if (da > 80 || da < -80) {
+		go(robot, id, x, y);
+	}
+	else {
+		//go(robot, id, x, y);
+		Position(robot, x, y);
+	}
+}
 /*
 进攻框架：
 按照底角和中心分区，底角采取传球模式，中心进行射门姿势
@@ -570,7 +606,7 @@ void dirShoot(Field* field, int id) {
 		if (dy + field->ball.position.y < FBOT + 1.0*2.54) {
 			dy *= -1;
 		}
-		go(&(field->selfRobots[id]), id, field->ball.position.x + 3.0*2.54, field->ball.position.x + dy);
+		go(&(field->selfRobots[id]), id, field->ball.position.x + 3.0*2.54, field->ball.position.y + dy);
 		return;
 	}
 	if (Distance(field->selfRobots[id].position, field->ball.position) > 15.0*2.54) {
@@ -623,8 +659,8 @@ void dirShoot(Field* field, int id) {
 	//}
 
 	//防止溢出
-	if (ty > FTOP - 5.0*2.54 || ty <FBOT + 5.0*2.54) {
-		Position(&(field->selfRobots[id]), field->ball.position.x, field->ball.position.x);
+	if (ty > FTOP - 10.0*2.54 || ty <FBOT + 10.0*2.54 || tx < FLEFTX + 10.0 || tx > FRIGHTX - 10.0) {
+		PositionPro(&(field->selfRobots[id]), id, field->ball.position.x, field->ball.position.y);
 		return;
 	}
 
@@ -644,7 +680,7 @@ void dirShoot(Field* field, int id) {
 		Velocity(&(field->selfRobots[id]), 10, 10);
 	}
 	else {
-		Position(&(field->selfRobots[id]), tx, ty);
+		PositionPro(&(field->selfRobots[id]), id, tx, ty);
 	}
 
 }
