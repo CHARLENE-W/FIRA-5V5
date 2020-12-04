@@ -144,7 +144,7 @@ void GetInstruction(Field* field) {
 	SendLog(L"V/DLLStrategy:GetInstruction()");
 	//attack(1, 2, 3, field);
 	dirShoot(field, 4);
-	avoidance(field, 4);
+	//avoidance(field, 4);
 	//go(&(field->selfRobots[2]), 2, 0, 0);
 }
 
@@ -772,6 +772,10 @@ void dirShoot(Field* field, int id) {
 		ty = F((GBOTY - field->ball.position.y) / (GLEFT - field->ball.position.x),
 			field->ball.position.x, field->ball.position.y, tx);
 		dirShootPos[id] = { GLEFT * 1.0, GBOTY * 0.7 + GTOPY * 0.3 };
+
+		/*ty = F((GBOTY - field->ball.position.y) / (GLEFT - field->ball.position.x),
+			field->ball.position.x, field->ball.position.y, tx);
+		dirShootPos[id] = { GLEFT * 1.0, GBOTY * 0.7 + GTOPY * 0.3 };*/
 	}
 
 	
@@ -804,7 +808,7 @@ void dirShoot(Field* field, int id) {
 		double y = (dirShootPos[id].y - field->ball.position.y) * 0.3 + field->ball.position.y;
 		go(&(field->selfRobots[id]), id, x, y);
 	}
-	else if (dist < 10.0*2.54) {
+	else if (dist < 8.0*2.54) {
 		Velocity(&(field->selfRobots[id]), 10, 10);
 	}
 	else {
