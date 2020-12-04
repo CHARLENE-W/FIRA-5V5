@@ -65,6 +65,7 @@ void to(Robot* robot, int RID, double x, double y);
 void go(Robot* robot, int rID, const double x, const double y);
 void Position(Robot* robot, double x, double y);
 void PositionPro(Robot* robot, double x, double y);
+void avoidance(Field* field, int id);
 void RightWing(Field* pEnv, int id);
 /*ADD*/
 
@@ -79,7 +80,7 @@ int pos(Vector2 pos);
 
 bool canKshoot(Field* field, int id);
 void dirShoot(Field* field, int id);
-
+void YellowdirShoot(Field* field, int id);
 
 
 
@@ -142,7 +143,8 @@ void GetTeamInfo(TeamInfo* teamInfo) {
 void GetInstruction(Field* field) {
 	SendLog(L"V/DLLStrategy:GetInstruction()");
 	//attack(1, 2, 3, field);
-	Shoot(field);
+	dirShoot(field, 4);
+	avoidance(field, 4);
 	//go(&(field->selfRobots[2]), 2, 0, 0);
 }
 
@@ -528,6 +530,71 @@ void PositionPro(Robot* robot, int id, double x, double y) {
 		Position(robot, x, y);
 	}
 }
+void avoidance(Field* field, int id)
+{
+	bool duiren = false;
+	for (int i = 0; i <= 4; i++) {
+		if (i != id) {
+
+			//先查找距离是否相近，在判断是否在前进方向上
+			if (Distance(field->selfRobots[i].position, field->selfRobots[id].position) < 6) {
+				double deltaY = field->selfRobots[i].position.y - field->selfRobots[id].position.y;
+				double deltaX = field->selfRobots[i].position.x - field->selfRobots[id].position.x;
+				double angle_home_another = Atan(fabs(deltaY), fabs(deltaX));
+				if (deltaX < 0 && deltaY>0) { angle_home_another = 180 - angle_home_another; }
+				else
+				{
+					if (deltaX > 0 && deltaY < 0) { angle_home_another = -angle_home_another; }
+					else
+					{
+						if (deltaX < 0 && deltaY < 0) { angle_home_another = -180 + angle_home_another; }
+
+					}
+				}
+
+				if (fabs(angle_home_another - field->selfRobots[id].rotation) < 20)
+				{
+
+					duiren = true;
+
+					break;
+				}
+			}
+
+		}
+
+		if (Distance(field->opponentRobots[i].position, field->selfRobots[id].position) < 6) {
+			double deltaY = field->opponentRobots[i].position.y - field->selfRobots[id].position.y;
+			double deltaX = field->opponentRobots[i].position.x - field->selfRobots[id].position.x;
+			double angle_home_another = Atan(fabs(deltaY), fabs(deltaX));
+			if (deltaX < 0 && deltaY>0) { angle_home_another = 180 - angle_home_another; }
+			else {
+				if (deltaX > 0 && deltaY < 0) { angle_home_another = -angle_home_another; }
+				else
+				{
+					if (deltaX < 0 && deltaY < 0) { angle_home_another = -180 + angle_home_another; }
+
+				}
+			}
+
+
+			if (fabs(angle_home_another - field->selfRobots[id].rotation) < 20)
+			{
+
+				duiren = true;
+
+				break;
+			}
+		};
+
+	}
+	
+	if (duiren)
+		Velocity(&field->selfRobots[id], -120, 120);
+
+}
+
+
 /*
 进攻框架：
 按照底角和中心分区，底角采取传球模式，中心进行射门姿势
@@ -743,5 +810,99 @@ void dirShoot(Field* field, int id) {
 	else {
 		PositionPro(&(field->selfRobots[id]), id, tx, ty);
 	}
+
+}
+
+
+void YellowdirShoot(Field* field, int id) {
+	//Position(&(field->selfRobots[id]), GLEFT, 0);
+	
+	//还锁
+	//if (field->selfRobots[id].position.x < field->ball.position.x) {
+	//	dirShootLock[id] = 0;
+	//	double dy = field->selfRobots[id].position.y > field->ball.position.y ? 3.0 * 2.54 : -3.0 * 2.54;
+	//	;
+	//	if (dy + field->ball.position.y > FTOP - 1.0 * 2.54) {
+	//		dy *= -1;
+	//	}
+	//	if (dy + field->ball.position.y < FBOT + 1.0 * 2.54) {
+	//		dy *= -1;
+	//	}
+	//	go(&(field->selfRobots[id]), id, field->ball.position.x - 3.0 * 2.54, field->ball.position.y + dy);
+	//	return;
+	//}
+	//if (Distance(field->selfRobots[id].position, field->ball.position) > 15.0 * 2.54) {
+	//	//注意dist的值不能小于自己设的那个延长距离
+	//	dirShootLock[id] = 0;
+	//}
+
+	//射门
+	//if (dirShootLock[id]) {
+	//	//go(&(field->selfRobots[id]), id, dirShootPos[id].x, dirShootPos[id].y);
+	//	double x = -(dirShootPos[id].x - field->ball.position.x) * 0.3 + field->ball.position.x;
+	//	double y = -(dirShootPos[id].y - field->ball.position.y) * 0.3 + field->ball.position.y;
+	//	//Position(&(field->selfRobots[id]), x, y);
+	//	go(&(field->selfRobots[id]), id, x, y);
+	//	//还锁
+
+	//	return;
+	//}
+
+	//dirShootLock[id] = 0;
+	////简单判断
+	//double tx = field->ball.position.x - 10.0 * 2.54, ty;
+	//if (field->ball.position.y < GBOTY + 5.0) {
+	//	ty = F((GTOPY - field->ball.position.y) / (GLEFT - field->ball.position.x),
+	//		field->ball.position.x, field->ball.position.y, tx);
+	//	dirShootPos[id] = { GLEFT * 1.0, GBOTY * 0.3 + GTOPY * 0.7 };
+	//}
+	//else if (field->ball.position.y > GTOPY - 5.0) {
+	//	ty = F((GBOTY - field->ball.position.y) / (GLEFT - field->ball.position.x),
+	//		field->ball.position.x, field->ball.position.y, tx);
+	//	dirShootPos[id] = { GLEFT * 1.0, GBOTY * 0.7 + GTOPY * 0.3 };
+	//}
+	//else {
+	//	//需要细化
+	//	ty = F((GBOTY - field->ball.position.y) / (GLEFT - field->ball.position.x),
+	//		field->ball.position.x, field->ball.position.y, tx);
+	//	dirShootPos[id] = { GLEFT * 1.0, GBOTY * 0.7 + GTOPY * 0.3 };
+	//}
+
+
+	////if (env->opponent[0].pos.y > MID) {
+	////	//守门员在上面
+	////	ty = F((env->goalBounds.bottom - field->ball.position.y) / (env->goalBounds.left - field->ball.position.x),
+	////		field->ball.position.x, field->ball.position.y, tx);
+	////}
+	////else {
+	////	//守门员在下面
+	////	ty = F((env->goalBounds.top - field->ball.position.y) / (env->goalBounds.left - field->ball.position.x),
+	////		field->ball.position.x, field->ball.position.y, tx);
+	////}
+
+	////防止溢出
+	//if (ty > FTOP - 10.0 * 2.54 || ty < FBOT + 10.0 * 2.54 || tx < FLEFTX + 10.0 || tx > FRIGHTX - 10.0) {
+	//	PositionPro(&(field->selfRobots[id]), id, field->ball.position.x, field->ball.position.y);
+	//	return;
+	//}
+
+	////do shooting
+
+	//double dist = Distance(tx, field->selfRobots[id].position.x, ty, field->selfRobots[id].position.y);
+	//if (dist < 1.5 * 2.54) {
+	//	dirShootLock[id] = 1;
+	//	//Velocity(&(field->selfRobots[id]), 0, 0);
+	//	//RotateTo(&(field->selfRobots[id]), id, dirShootPos[id].x, dirShootPos[id].y);
+	//	//Position(&(field->selfRobots[id]), dirShootPos[id].x, dirShootPos[id].y);
+	//	double x = -(dirShootPos[id].x - field->ball.position.x) * 0.3 + field->ball.position.x;
+	//	double y = -(dirShootPos[id].y - field->ball.position.y) * 0.3 + field->ball.position.y;
+	//	go(&(field->selfRobots[id]), id, x, y);
+	//}
+	//else if (dist < 10.0 * 2.54) {
+	//	Velocity(&(field->selfRobots[id]), 10, 10);
+	//}
+	//else {
+	//	PositionPro(&(field->selfRobots[id]), id, tx, ty);
+	//}
 
 }
