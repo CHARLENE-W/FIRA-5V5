@@ -64,7 +64,7 @@ double RotateTo(Robot* robot, int rID, const double desX, const double desY);
 void to(Robot* robot, int RID, double x, double y);
 void go(Robot* robot, int rID, const double x, const double y);
 void Position(Robot* robot, double x, double y);
-void PositionPro(Robot* robot, double x, double y);
+void PositionPro(Robot* robot, int id, double x, double y);
 void avoidance(Field* field, int id);
 void RightWing(Field* pEnv, int id);
 /*ADD*/
@@ -80,7 +80,6 @@ int pos(Vector2 pos);
 
 bool canKshoot(Field* field, int id);
 void dirShoot(Field* field, int id);
-void YellowdirShoot(Field* field, int id);
 
 
 
@@ -142,10 +141,27 @@ void GetTeamInfo(TeamInfo* teamInfo) {
 
 void GetInstruction(Field* field) {
 	SendLog(L"V/DLLStrategy:GetInstruction()");
-	//attack(1, 2, 3, field);
-	dirShoot(field, 4);
-	//avoidance(field, 4);
-	//go(&(field->selfRobots[2]), 2, 0, 0);
+	
+	//还得套一个对球位置的判断
+	//选一个robot留下 策略有待斟酌
+	int leaveRob = -1;
+	double maxX = 0;
+	for (int i = 1; i < 5; i++) {
+		if (field->selfRobots[i].position.x > maxX) {
+			maxX = field->selfRobots[i].position.x;
+			leaveRob = i;
+		}
+	}
+	int att[3], atti = 0;
+	for (int i = 1; i < 5; i++) {
+		if (i != leaveRob) {
+			att[atti] = i;
+			++atti;
+		}
+	}
+	attack(att[0], att[1], att[2], field);
+	//留下leaveRob
+
 }
 
 void GetPlacement(Field* field) {
@@ -677,24 +693,124 @@ void Shoot(Field* field)
 }
 
 //琦玲的
-void attack(int robot1, int robot2, int robot3,Field* field) {
+void attack(int robot1, int robot2, int robot3, Field* field) {//传入参数就是进攻的三个机器人ID
 	//球在对方半场
-	int low, middle, most;
+	int l, m, r;//最近 中间 最远
+	double dis1 = Distance(field->selfRobots[robot1].position, field->ball.position);
+	double dis2 = Distance(field->selfRobots[robot2].position, field->ball.position);
+	double dis3 = Distance(field->selfRobots[robot3].position, field->ball.position);
+	if (dis1 < dis2) {
+		l = dis1 < dis3 ? robot1 : robot3;
+		r = dis2 > dis3 ? robot2 : robot3;
+	}
+	else {
+		l = dis2 < dis3 ? robot2 : robot3;
+		r = dis1 > dis3 ? robot1 : robot3;
+	}
+	m = robot1 + robot2 + robot3 - l - r;
 	
-	if (field->ball.position.x < 0) {
+	//int L, M, R;//最近 中间 最远
+	// dis1 = dis(field->opponentRobots[2].position, field->ball.position);
+	// dis2 = dis(field->opponentRobots[3].position, field->ball.position);
+	// dis3 = dis(field->opponentRobots[4].position, field->ball.position);
+	//if (dis1 < dis2) {
+	//	L = dis1 < dis3 ? 2 : 4;
+	//	R = dis2 > dis3 ? 3 : 4;
+	//}
+	//else {
+	//	L = dis2 < dis3 ? 3 : 4;
+	//	R = dis1 > dis3 ? 2 : 4;
+	//}
+	//M = 2 + 3 + 4 - L - R;
+	//30-》0
+	if (field->ball.position.x < 30) {
 		switch (pos(field->ball.position))
 		{
 		case 1: {
-			
+			//左上
+			go(&field->selfRobots[l], l, field->ball.position.x, field->ball.position.y);
+			go(&field->selfRobots[r], r, (double)field->ball.position.x + 10, (double)field->ball.position.y * 0.1);
+			go(&field->selfRobots[m], m, (double)field->selfRobots[l].position.x + 10, (double)field->selfRobots[l].position.y - 10);
 		}
-		case 2:
-		case 3:
+		case 2: {
+			//右下
+			go(&field->selfRobots[l], l, field->ball.position.x, field->ball.position.y);
+			go(&field->selfRobots[r], r, (double)field->ball.position.x + 10, (double)-field->selfRobots[l].position.y * 0.1);
+			go(&field->selfRobots[m], m, (double)field->selfRobots[l].position.x + 10, (double)field->selfRobots[l].position.y + 10);
+		}
+		case 3: {
+			//中间区域
+			/* 
+				!!!!!!!
+				亚欣在后面找个地方插夹球
+				!!!!!!!
+			*/
+
+			if (dirShootLock[l] == 1 || Distance(field->selfRobots[l].position, field->ball.position) > 8.0 * 2.54) {
+				//最近球员都比较远
+				dirShoot(field, l);
+
+				//m 
+				//r
+			}
+			else if (dirShootLock[m] == 1) {
+				//最近的控球 m冲
+				dirShoot(field, m);
+
+				//l
+				//r
+			}
+			else if (dirShootLock[r] == 1) {
+				//最近的控球 m冲
+				dirShoot(field, m);
+
+				//l
+				//r
+			}
+
+			//依次判断是否能直射
+			if (canKshoot(field, l)) {
+				//piao的老代码的 感觉不大好 亚欣改了predictBall看能不能好一点
+				PredictBall2(1 / 30, field);
+				go(&(field->selfRobots[l]), l, PBP[0], PBP[1]);
+				//m
+				//r
+			}
+			else if(canKshoot(field, m)) {
+				PredictBall2(1 / 30, field);
+				go(&(field->selfRobots[m]), m, PBP[0], PBP[1]);
+				//l 控球？
+				//r
+			}
+			else if (canKshoot(field, r)) {
+				PredictBall2(1 / 30, field);
+				go(&(field->selfRobots[r]), r, PBP[0], PBP[1]);
+				
+				//l 控球？
+				//m 跟人？
+			}
+
+			
+			else {
+				//两个追 一个在中间等？
+				go(&(field->selfRobots[l]), l, PBP[0], PBP[1]);
+				go(&(field->selfRobots[m]), m, PBP[0], PBP[1]);
+				go(&(field->selfRobots[r]), r, -60, 0);
+				//r wait
+			}
+		}
 		default:
 			break;
 		}
 	}
+	else {
+		//转防守？
+		//go(&field->selfRobots[0], 0, field->ball.position.x, field->ball.position.y);
+		Velocity(&field->selfRobots[0], -100, 100);//!!!!测试 记得删掉
+	}
 
 }
+
 
 int pos(Vector2 pos) {
 	if (pos.x < -60) {
@@ -703,9 +819,6 @@ int pos(Vector2 pos) {
 	}
 	return 3;
 }
-//double dis(Vector2 p1, Vector2 p2) {
-//	return (p1.x-p2.x)*(p2.x-p2.x)+
-// }
 
 
 bool canKshoot(Field* field, int id)
@@ -716,15 +829,17 @@ bool canKshoot(Field* field, int id)
 		double bx = field->ball.position.x;
 		double by = field->ball.position.y;
 		double y = F(k, bx, by, FLEFTX);
-		if (y > GTOPY - 5 && y < GBOTY + 5) {
+		if (y < GTOPY - 2.5 && y > GBOTY + 2.5) {
 			return true;
 		}
 	}
 	return false;
 }
 void dirShoot(Field* field, int id) {
+	double Bdist = Distance(field->selfRobots[id].position, field->ball.position);
 	//还锁
 	if (field->selfRobots[id].position.x < field->ball.position.x) {
+		//最好加上速度判断
 		dirShootLock[id] = 0;
 		double dy = field->selfRobots[id].position.y > field->ball.position.y ? 3.0*2.54 : -3.0*2.54;
 		;
@@ -737,7 +852,7 @@ void dirShoot(Field* field, int id) {
 		go(&(field->selfRobots[id]), id, field->ball.position.x + 3.0*2.54, field->ball.position.y + dy);
 		return;
 	}
-	if (Distance(field->selfRobots[id].position, field->ball.position) > 15.0*2.54) {
+	if (Bdist > 15.0*2.54) {
 		//注意dist的值不能小于自己设的那个延长距离
 		dirShootLock[id] = 0;
 	}
@@ -755,8 +870,10 @@ void dirShoot(Field* field, int id) {
 	}
 
 	dirShootLock[id] = 0;
+	
 	//简单判断
 	double tx = field->ball.position.x + 10.0*2.54, ty;
+
 	if (field->ball.position.y < GBOTY + 5.0) {
 		ty = F((GTOPY - field->ball.position.y) / (GLEFT - field->ball.position.x),
 			field->ball.position.x, field->ball.position.y, tx);
@@ -790,7 +907,7 @@ void dirShoot(Field* field, int id) {
 	//		field->ball.position.x, field->ball.position.y, tx);
 	//}
 
-	//防止溢出
+	//防止溢出 !!!!!!!!!!!!参数应该要改？
 	if (ty > FTOP - 10.0*2.54 || ty <FBOT + 10.0*2.54 || tx < FLEFTX + 10.0 || tx > FRIGHTX - 10.0) {
 		PositionPro(&(field->selfRobots[id]), id, field->ball.position.x, field->ball.position.y);
 		return;
@@ -816,7 +933,6 @@ void dirShoot(Field* field, int id) {
 	}
 
 }
-
 
 void YellowdirShoot(Field* field, int id) {
 	//Position(&(field->selfRobots[id]), GLEFT, 0);
