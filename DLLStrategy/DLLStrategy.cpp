@@ -72,12 +72,17 @@ void RightWing(Field* pEnv, int id);
 double KTOP, KBTO;
 void Attack(Field* field);
 void LineAttack(Field* field);
-
+void Shoot(Field* field);
 
 void attack(int robot1, int robot2, int robot3, Field* field);
 int pos(Vector2 pos);
 
+bool canKshoot(Field* field, int id);
 void dirShoot(Field* field, int id);
+
+
+
+
 
 /*main*/
 void OnEvent(EventType type, void* argument) {
@@ -137,7 +142,7 @@ void GetTeamInfo(TeamInfo* teamInfo) {
 void GetInstruction(Field* field) {
 	SendLog(L"V/DLLStrategy:GetInstruction()");
 	//attack(1, 2, 3, field);
-	dirShoot(field, 4);
+	Shoot(field);
 	//go(&(field->selfRobots[2]), 2, 0, 0);
 }
 
@@ -175,6 +180,10 @@ void GetPlacement(Field* field) {
 }
 
 /*main*/
+
+
+
+
 
 //计算用
 double Atan(double y, double x) {
@@ -386,7 +395,7 @@ void to(Robot* robot, int RID, double x, double y)
 	double length;
 	double dx, dy;
 	int lt;
-	double l = 3;
+	double l = 3 * 2.54;
 	dx = robot->position.x - x;
 	dy = robot->position.y - y;
 	length = sqrt(dx * dx + dy * dy);
@@ -412,18 +421,18 @@ void to(Robot* robot, int RID, double x, double y)
 		{
 			Velocity(robot, 7, 7);
 		}
-		if (length < 1)
+		if (length < 2.54)
 		{
 			Velocity(robot, 4, 4);
 		}
-		if (length < 0.7)
+		if (length < 1.8)
 		{
 			Velocity(robot, 2, 2);
-		}if (length < 0.4)
+		}if (length < 1)
 		{
 			Velocity(robot, 1, 1);
 		}
-		if (length < 0.2)
+		if (length < 0.5)
 		{
 			Velocity(robot, 0, 0);
 		}
@@ -560,6 +569,45 @@ void LineAttack(Field* field)
 	KTOP = (PBP[1] - 20) / (PBP[0] + 110);
 	KBTO = (PBP[1] + 20) / (PBP[0] + 110);
 }
+void Shoot(Field* field)
+{
+	//夹球射门
+	double x1 = field->selfRobots[3].position.x;
+	double y1 = field->selfRobots[3].position.y;
+	double x2 = field->selfRobots[4].position.x;
+	double y2 = field->selfRobots[4].position.y;
+	double k = (x1 - x2) / (y1 - y2);
+	PredictBall2(1, field);
+	double xc = PBP[0];
+	double yc = PBP[1];
+	double b = yc - k * xc;
+	double ShootY = k * FRIGHTX + b;
+	double d1 = Distance(x1, y1, xc, yc);
+	double d2 = Distance(x2, y2, xc, yc);
+	double v1, v2;
+	if (d1 > d2)
+	{
+		v1 = 125;
+		v2 = v1 * d2 / d1;
+	}
+	else
+	{
+		v2 = 125;
+		v1 = v2 * d1 / d2;
+	}
+
+	if (ShootY <= GTOPY && ShootY >= GBOTY)
+	{
+		RotateTo(&(field->selfRobots[3]), 3, xc, yc);
+		RotateTo(&(field->selfRobots[4]), 4, xc, yc);
+		if (NEEDROTATE[3] != 1)
+		{
+			Velocity(&(field->selfRobots[3]), v1, v1);
+		}
+		if (NEEDROTATE[4] != 1)
+			Velocity(&(field->selfRobots[4]), v2, v2);
+	}
+}
 
 //琦玲的
 void attack(int robot1, int robot2, int robot3,Field* field) {
@@ -593,7 +641,20 @@ int pos(Vector2 pos) {
 // }
 
 
+bool canKshoot(Field* field, int id)
+{
 
+	if (field->selfRobots[id].position.x > field->ball.position.x) {
+		double k = (field->selfRobots[id].position.y - field->ball.position.y) / (field->selfRobots[id].position.x - field->ball.position.x);
+		double bx = field->ball.position.x;
+		double by = field->ball.position.y;
+		double y = F(k, bx, by, FLEFTX);
+		if (y > GTOPY - 5 && y < GBOTY + 5) {
+			return true;
+		}
+	}
+	return false;
+}
 void dirShoot(Field* field, int id) {
 	//还锁
 	if (field->selfRobots[id].position.x < field->ball.position.x) {
