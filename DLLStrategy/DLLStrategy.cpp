@@ -85,7 +85,7 @@ void activeDefender(Field* field, Robot* robot, int riD);
 void Defend(Field* field, int rID);
 void MidDefend(Field* field, int id1, int id2);
 void NegDefend(Field* field, int id);
-
+void keeper(Robot* robot, int rID, Field* field);
 /*main*/
 void OnEvent(EventType type, void* argument) {
 	SendLog(L"V/DLLStrategy:OnEvent()");
@@ -165,11 +165,11 @@ void GetInstruction(Field* field) {
 	COUNT2++;
 	estimateV(field);
 	//BlueShoot(field);
-	if (field->ball.position.x < 0)
+	if (field->ball.position.x > 0)
 	{
 		Yattack(2, 3, 4, field);
 		Defend(field, 1);
-		Goliar(field);
+		keeper(&(field->selfRobots[0]),0,field);
 	}
 		
 	else
@@ -1155,4 +1155,34 @@ void Goliar(Field* field)
 				go(&field->selfRobots[0], 0, -106, by);
 		}
 	}
+}
+void keeper(Robot* robot, int rID, Field* field) {
+	double bx, by, rx, ry;
+	double le;
+	int bv[6] = { 3,10,20,30,40,50 };
+
+	PredictBall2(1, field);
+
+	le = 2.0;
+	double X = 110;
+	double Y = 0;
+	rx = robot->position.x;
+	ry = robot->position.y;
+
+	bx = field->ball.position.x;
+	by = field->ball.position.y;
+
+	if (PBP[1] > 40)
+		PBP[1] = 40;
+	if (PBP[1] < -40)
+		PBP[1] = -40;
+	if (by > 40)
+		by = 40;
+	if (by < -40)
+		by = -40;
+	if (bx > 75 )
+		to(robot, rID, X, PBP[1]);
+	else
+		go(robot, rID, X, by);
+
 }
