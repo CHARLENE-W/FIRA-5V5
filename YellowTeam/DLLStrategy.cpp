@@ -1133,7 +1133,7 @@ void Goliar(Field* field)
 {
 	double bx = field->ball.position.x;
 	double by = field->ball.position.y;
-	if (bx <= 0)
+	if (bx > 0)
 	{
 		if (by >= 25)
 			go(&field->selfRobots[0], 0, -106, 21);
@@ -1146,7 +1146,8 @@ void Goliar(Field* field)
 	{
 		if (bx <= -71.5 && bx >= -115 && by >= -40 && by <= 40)
 		{
-			go(&field->selfRobots[0], 0, bx - 3, by);
+			go(&field->selfRobots[0], 0, bx , by);
+			return;
 		}
 		else
 		{
