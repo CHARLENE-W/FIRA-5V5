@@ -165,7 +165,22 @@ void GetInstruction(Field* field) {
 	//go(&(field->selfRobots[2]), 2, 0, 0);
 	COUNT2++;
 	estimateV(field);
-	BlueShoot(field);
+	//BlueShoot(field);
+	if (field->ball.position.x < 0)
+	{
+		attack(2, 3, 4, field);
+		Defend(field, 1);
+		Goliar(field);
+	}
+		
+	else
+	{
+		MidDefend(field, 4, 3);
+		Defend(field, 1);
+		Goliar(field);
+		NegDefend(field, 2);
+	}
+
 }
 
 void GetPlacement(Field* field) {
