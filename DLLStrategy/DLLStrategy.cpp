@@ -1033,7 +1033,7 @@ bool BlueShoot(Field* field)
 	double s2 = atan2(yc - y2, xc - x2);
 	if (x1 < xc || x2 < xc)
 		return FALSE;
-	if (s1 + s2 < 20 / PI)
+	if (s1 + s2 < 20 / 180*PI)
 		return FALSE;
 	double b = yc - k * xc;
 	double ShootY = k * FRIGHTX + b;
