@@ -152,7 +152,7 @@ void OnEvent(EventType type, void* argument) {
 
 void GetTeamInfo(TeamInfo* teamInfo) {
 	SendLog(L"V/DLLStrategy:GetTeamInfo()");
-	static const wchar_t teamName[] = L"TEST 3";
+	static const wchar_t teamName[] = L"BITCS1";
 	static constexpr size_t len = sizeof(teamName);
 	memcpy(teamInfo->teamName, teamName, len);
 }
@@ -715,6 +715,7 @@ void attack(int robot1, int robot2, int robot3, Field* field) {//传入参数就
 			*/
 			//if(atan2)
 			//判断夹球射击，BlueShoot返回true则夹球成功
+			
 			if (BlueShoot(field))
 				;
 			else
@@ -1015,6 +1016,8 @@ bool BlueShoot(Field* field)
 	double yc = PBP[1];
 	double s1 = atan2(yc - y1, xc - x1);
 	double s2 = atan2(yc - y2, xc - x2);
+	if (x1 < xc || x2 < xc)
+		return FALSE;
 	if (s1 + s2 < 20 / PI)
 		return FALSE;
 	double b = yc - k * xc;
