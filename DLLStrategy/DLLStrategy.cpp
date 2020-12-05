@@ -16,6 +16,8 @@ typedef struct
 }Mydata;
 double MID = 0;
 int TIMECOUNTER = 0;
+int Eventstate;
+int Judgestate;
 double Gate = 90;
 const double FTOP = 90;
 const double FBOT = -90;
@@ -88,42 +90,57 @@ void NegDefend(Field* field, int id);
 /*main*/
 void OnEvent(EventType type, void* argument) {
 	SendLog(L"V/DLLStrategy:OnEvent()");
-
 	switch (type) {
 	case EventType::FirstHalfStart: {
 		SendLog(L"First Half Start");
+		Eventstate = 3;
 		break;
 	}
 	case EventType::SecondHalfStart: {
 		SendLog(L"Second Half Start");
+		Eventstate = 4;
 		break;
 	}
 	case EventType::OvertimeStart: {
 		SendLog(L"Overtime Start");
+		Eventstate = 5;
 		break;
 	}
 	case EventType::PenaltyShootoutStart: {
 		SendLog(L"Penalty Shootout Start");
+		Eventstate = 6;
 		break;
 	}
 	case EventType::JudgeResult: {
 		JudgeResultEvent* judgeResult = static_cast<JudgeResultEvent*>(argument);
-		whichType = judgeResult->type;
 		switch (judgeResult->type) {
 		case JudgeType::PlaceKick:
 			SendLog(L"Place Kick");
+			Judgestate = 0;
 			break;
 		case JudgeType::PenaltyKick:
 			SendLog(L"Penalty Kick");
+			Judgestate = 2;
 			break;
 		case JudgeType::GoalKick:
 			SendLog(L"Goal Kick");
+			Judgestate = 1;
 			break;
 		case JudgeType::FreeKickLeftBot:
+			SendLog(L"Free Kick");
+			Judgestate = 6;
+			break;
 		case JudgeType::FreeKickLeftTop:
+			SendLog(L"Free Kick");
+			Judgestate = 5;
+			break;
 		case JudgeType::FreeKickRightBot:
+			SendLog(L"Free Kick");
+			Judgestate = 4;
+			break;
 		case JudgeType::FreeKickRightTop:
 			SendLog(L"Free Kick");
+			Judgestate = 3;
 			break;
 		}
 		break;
@@ -153,34 +170,35 @@ void GetInstruction(Field* field) {
 
 void GetPlacement(Field* field) {
 	SendLog(L"V/DLLStrategy:GetPlacement()");
-	switch (whichType)
+	double bx = field->ball.position.x;
+	double by = field->ball.position.y;
+	if (Judgestate == 0)
 	{
-	case JudgeType::PlaceKick:
-		field->selfRobots[0].position = { 100,0 };
-		field->selfRobots[1].position = { 80,60 };
-		field->selfRobots[2].position = { 80,-60 };
-		field->selfRobots[3].position = { 20,60 };
-		field->selfRobots[4].position = { 30,-60 };
-		break;
-	case JudgeType::PenaltyKick:
-		SendLog(L"Penalty Kick");
-		break;
-	case JudgeType::GoalKick:
-		SendLog(L"Goal Kick");
-		break;
-	case JudgeType::FreeKickLeftBot:
-		field->selfRobots[0].position = { 110,0 };
-		field->selfRobots[1].position = { 80,60 };
-		field->selfRobots[2].position = { 80,-60 };
-		field->selfRobots[3].position = { 30,60 };
-		field->selfRobots[4].position = { 30,-60 };
-	case JudgeType::FreeKickLeftTop:
-	case JudgeType::FreeKickRightBot:
-	case JudgeType::FreeKickRightTop:
-		SendLog(L"Free Kick");
-		break;
-	default:
-		break;
+		field->selfRobots[4].position.x = 0;
+		field->selfRobots[4].position.y = 20;
+
+		field->selfRobots[3].position.x = 40;
+		field->selfRobots[3].position.y = 9;
+
+		field->selfRobots[2].position.x = 40;
+		field->selfRobots[2].position.y = -9;
+
+		field->selfRobots[1].position.x = 40;
+		field->selfRobots[1].position.y = 0;
+	}
+	else if (Judgestate == 2)
+	{
+		field->selfRobots[4].position.x = 50;
+		field->selfRobots[4].position.y = 50;
+
+		field->selfRobots[0].position.y = 0;
+	}
+	else if (Judgestate == 1)
+	{
+		field->ball.position.y = 23;
+		field->ball.position.x = 97;
+
+		field->selfRobots->position.y = 0;
 	}
 }
 
@@ -831,7 +849,7 @@ void dirShoot(Field* field, int id) {
 
 	//简单判断
 	double tx = field->ball.position.x + 10.0 * 2.54, ty;
-
+	
 	if (field->ball.position.y < GBOTY + 5.0) {
 		ty = F((GTOPY - field->ball.position.y) / (GLEFT - field->ball.position.x),
 			field->ball.position.x, field->ball.position.y, tx);
