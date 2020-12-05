@@ -1036,7 +1036,7 @@ bool BlueShoot(Field* field)
 	if (s1 + s2 < 20 / 180*PI)
 		return FALSE;
 	double b = yc - k * xc;
-	double ShootY = k * FRIGHTX + b;
+	double ShootY = k * FLEFTX + b;
 	if (ShootY > GTOPY || ShootY < GBOTY)
 		return FALSE;
 	double d1 = Distance(x1, y1, xc, yc);
