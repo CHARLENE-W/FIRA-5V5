@@ -1,9 +1,24 @@
-﻿  stdafx.cpp
-  dllmain.cpp
-  DLLStrategy.cpp
-    正在创建库 D:\robot\DLLStrategy-master\Release\DLLStrategy.lib 和对象 D:\robot\DLLStrategy-master\Release\DLLStrategy.exp
+﻿  DLLStrategy.cpp
+\\Mac\Home\Documents\GitHub\FIRA-5V5\DLLStrategy\DLLStrategy.cpp(300,27): warning C4244: “=”: 从“int”转换到“float”，可能丢失数据
+\\Mac\Home\Documents\GitHub\FIRA-5V5\DLLStrategy\DLLStrategy.cpp(301,28): warning C4244: “=”: 从“int”转换到“float”，可能丢失数据
+\\Mac\Home\Documents\GitHub\FIRA-5V5\DLLStrategy\DLLStrategy.cpp(329,16): warning C4244: “参数”: 从“double”转换到“float”，可能丢失数据
+\\Mac\Home\Documents\GitHub\FIRA-5V5\DLLStrategy\DLLStrategy.cpp(452,28): warning C4244: “=”: 从“int”转换到“float”，可能丢失数据
+\\Mac\Home\Documents\GitHub\FIRA-5V5\DLLStrategy\DLLStrategy.cpp(453,29): warning C4244: “=”: 从“int”转换到“float”，可能丢失数据
+\\Mac\Home\Documents\GitHub\FIRA-5V5\DLLStrategy\DLLStrategy.cpp(671,42): warning C4244: “参数”: 从“double”转换到“int”，可能丢失数据
+\\Mac\Home\Documents\GitHub\FIRA-5V5\DLLStrategy\DLLStrategy.cpp(671,38): warning C4244: “参数”: 从“double”转换到“int”，可能丢失数据
+\\Mac\Home\Documents\GitHub\FIRA-5V5\DLLStrategy\DLLStrategy.cpp(674,42): warning C4244: “参数”: 从“double”转换到“int”，可能丢失数据
+\\Mac\Home\Documents\GitHub\FIRA-5V5\DLLStrategy\DLLStrategy.cpp(674,38): warning C4244: “参数”: 从“double”转换到“int”，可能丢失数据
+\\Mac\Home\Documents\GitHub\FIRA-5V5\DLLStrategy\DLLStrategy.cpp(681,11): warning C4101: “middle”: 未引用的局部变量
+\\Mac\Home\Documents\GitHub\FIRA-5V5\DLLStrategy\DLLStrategy.cpp(681,6): warning C4101: “low”: 未引用的局部变量
+\\Mac\Home\Documents\GitHub\FIRA-5V5\DLLStrategy\DLLStrategy.cpp(681,19): warning C4101: “most”: 未引用的局部变量
+\\Mac\Home\Documents\GitHub\FIRA-5V5\DLLStrategy\DLLStrategy.cpp(941,42): warning C4244: “参数”: 从“double”转换到“int”，可能丢失数据
+\\Mac\Home\Documents\GitHub\FIRA-5V5\DLLStrategy\DLLStrategy.cpp(941,38): warning C4244: “参数”: 从“double”转换到“int”，可能丢失数据
+\\Mac\Home\Documents\GitHub\FIRA-5V5\DLLStrategy\DLLStrategy.cpp(942,42): warning C4244: “参数”: 从“double”转换到“int”，可能丢失数据
+\\Mac\Home\Documents\GitHub\FIRA-5V5\DLLStrategy\DLLStrategy.cpp(942,38): warning C4244: “参数”: 从“double”转换到“int”，可能丢失数据
+    正在创建库 \\Mac\Home\Documents\GitHub\FIRA-5V5\Release\DLLStrategy.lib 和对象 \\Mac\Home\Documents\GitHub\FIRA-5V5\Release\DLLStrategy.exp
   正在生成代码
-  Previous IPDB not found, fall back to full compilation.
-  All 81 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
   已完成代码的生成
-  DLLStrategy.vcxproj -> D:\robot\DLLStrategy-master\Release\DLLStrategy.dll
+  1 of 88 functions ( 1.1%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    1 functions had inline decision re-evaluated but remain unchanged
+  DLLStrategy.vcxproj -> \\Mac\Home\Documents\GitHub\FIRA-5V5\Release\DLLStrategy.dll
