@@ -40,12 +40,15 @@ double TRACE[6][2][2] = { -1,-1,-1,-1, -1,-1, -1,-1, -1,-1, -1,-1, -1,-1, -1,-1,
 double PBP[2] = { 0,0 };
 
 //粒子群
+double particle_w = 0.5;
 Vector2  Robot_old_pos[5];//!!!!记得初始化
 Vector2 particle_X[5] = { 0 };
 Vector2 particle_V[5] = { 0 };
 double  particle_F[5] = { 0 };
 Vector2 Pbest[5] = { 0 };
 Vector2 Gbest = { 0, 0 };
+
+int the_kick_one = 5;
 
 //射门锁
 int dirShootLock[5] = { 0 };
@@ -75,11 +78,14 @@ void Position(Robot* robot, double x, double y);
 void PositionPro(Robot* robot, int id,  double x, double y);
 void avoidance(Field* field, int id);
 void RightWing(Field* pEnv, int id);
+
 void kickBall_mid(Field* field, int id, Vector2 pos);
 void kickBall_circle(Field* field, int id, Vector2 pos);
+void waiter(Field* field, int id, Vector2 pos);
 /*ADD*/
 
 /* 粒子群 */
+unsigned int PSO_init_count = 0;
 void PSO_init(Field* field);
 void PSO_fresh(Field* field);
 void PSO_do(Field* field);
@@ -98,7 +104,6 @@ int pos(Vector2 pos);
 
 bool canKshoot(Field* field, int id);
 void dirShoot(Field* field, int id);
-void YellowdirShoot(Field* field, int id);
 
 //防守
 void Goliar(Field* field);
@@ -183,18 +188,45 @@ void GetTeamInfo(TeamInfo* teamInfo) {
 
 void GetInstruction(Field* field) {
 	SendLog(L"V/DLLStrategy:GetInstruction()");
-	//attack(1, 2, 3, field);
-	//dirShoot(field, 4);
-//	avoidance(field, 4);
-	//go(&(field->selfRobots[2]), 2, 0, 0);
+	
 	COUNT2++;
 	estimateV(field);
 	//BlueShoot(field);
-
-	PSO_init(field);
+	if (PSO_init_count == 0) {
+		PSO_init(field);
+	}
+	PSO_init_count++;
+	if (PSO_init_count >= 60) {
+		PSO_init_count = 0;
+	}
+	
 	PSO_fresh(field);
 	PSO_do(field);
+
+	//dirShoot(field, 4);
+
+	/*Vector2 kick2pos = { GLEFT, GBOTY };
+	kickBall_mid(field, 4, kick2pos);*/
+
+	/*if (the_kick_one == 5) {
+		the_kick_one = 4;
+		Vector2 kick2pos = { GLEFT, GBOTY };
+		kickBall_mid(field, 4, kick2pos);
+	}
+	else {
+		go(&(field->selfRobots[4]), 4, field->selfRobots[the_kick_one].position.x + 5.0, field->selfRobots[the_kick_one].position.y + 5.0);
+		Velocity(&(field->selfRobots[4]), 10, 10);
+	}
 	
+	Vector2 wait2pos = { -70, 0 };
+	if (field->opponentRobots[0].position.y > GTOPY * 0.7 + GBOTY * 0.3) {
+		wait2pos = { -70, GTOPY * 0.2 + GBOTY * 0.8 };
+	}
+	if (field->opponentRobots[0].position.y < GTOPY * 0.3 + GBOTY * 0.7) {
+		wait2pos = { -70, GTOPY * 0.8 + GBOTY * 0.2 };
+	}
+	waiter(field, 3, wait2pos);*/
+	//Position(&(field->selfRobots[4]), field->ball.position.x, field->ball.position.y);
 
 	/*Vector2 kick2pos = { GLEFT, GBOTY };
 	kickBall_mid(field, 4, kick2pos);*/
@@ -233,6 +265,14 @@ void GetPlacement(Field* field) {
 
 		field->selfRobots[0].position.y = 0;
 	}
+
+	
+	for (int i = 0; i < 5; i++) {
+		Robot_old_pos[i] = field->selfRobots[i].position;
+	}
+	COUNT2++;
+	estimateV(field);
+	PSO_init(field);
 }
 
 /*main*/
@@ -664,23 +704,49 @@ void avoidance(Field* field, int id)
 
 
 
+
 void kickBall_mid(Field* field, int id, Vector2 pos)
 {
-	//中垂线
-	double k1 = -(field->ball.position.x - field->selfRobots[id].position.x) / (field->ball.position.y - field->selfRobots[id].position.y);
-	double x1 = (field->ball.position.x + field->selfRobots[id].position.x) / 2.0;
-	double y1 = (field->ball.position.y + field->selfRobots[id].position.y) / 2.0;
 	//目标线
 	double k2 = (field->ball.position.y - pos.y) / (field->ball.position.x - pos.x);
 	double x2 = field->ball.position.x;
 	double y2 = field->ball.position.y;
+	double yy = F(k2, x2, y2, field->selfRobots[id].position.x);
+	if (field->selfRobots[id].position.x > field->ball.position.x &&
+		Distance(field->selfRobots[id].position, field->ball.position) < 5.0 ) {
+
+		go(&(field->selfRobots[id]), id, pos.x, pos.y);
+		return;
+	}
+
+	if (field->selfRobots[id].position.x > field->ball.position.x && 
+		Distance(field->selfRobots[id].position, field->ball.position) < 10.0 && 
+		fabs(yy - field->selfRobots[id].position.y) < 5.0) {
+
+		go(&(field->selfRobots[id]), id, field->ball.position.x, field->ball.position.y);
+		return;
+	}
+	
+
+	//中垂线
+	double kk = 0.5;
+	double k1 = -(field->ball.position.x - field->selfRobots[id].position.x) / (field->ball.position.y - field->selfRobots[id].position.y);
+	double x1 = (field->ball.position.x * kk + field->selfRobots[id].position.x * kk);
+	double y1 = (field->ball.position.y * kk + field->selfRobots[id].position.y * kk);
+	
+
 
 	Vector2 tpos = { 0, 0 };
 	tpos.x = (k1 * x1 - k2 * x2 + y2 - y1) / (k1 - k2);
 	tpos.y = k2 * (tpos.x - x2) + y2;
+	/*if (fabs(field->selfRobots[id].position.y - field->ball.position.y) < 5.0) {
+		go(&(field->selfRobots[id]), id, field->ball.position.x, field->ball.position.y);
+		return;
+	}*/
 
-	//Position(&(field->selfRobots[id]), tpos.x, tpos.y);
-	go(&(field->selfRobots[id]), id, tpos.x, tpos.y);
+	Position(&(field->selfRobots[id]), tpos.x, tpos.y);
+	//go(&(field->selfRobots[id]), id, tpos.x, tpos.y);
+	//PositionPro(&(field->selfRobots[id]), id, tpos.x, tpos.y);
 }
 
 void kickBall_circle(Field* field, int id, Vector2 pos)
@@ -700,6 +766,30 @@ void kickBall_circle(Field* field, int id, Vector2 pos)
 	return;
 }
 
+void waiter(Field* field, int id, Vector2 pos)
+{
+	if (Distance(field->selfRobots[id].position, field->ball.position) < 20.0 || 
+		(Distance(field->selfRobots[id].position, pos) < 5.0 && field->ball.position.y < GTOPY && field->ball.position.y > GBOTY)) {
+
+		the_kick_one = id;
+		PredictBall2(1, field);
+		Vector2 tpos = { FLEFTX, (float)PBP[1] };
+
+		//kickBall_mid(field, id, tpos);
+		go(&(field->selfRobots[id]), id, tpos.x, tpos.y);
+		return;
+	}
+
+	the_kick_one = 5;
+
+	go(&(field->selfRobots[id]), id, pos.x, pos.y);
+	if (Distance(field->selfRobots[id].position, pos) < 5.0) {
+		Velocity(&(field->selfRobots[id]), 10, 10);
+
+	}
+	//if(Distance(field->selfRobots[id].position, pos) < 5.0)
+}
+
 void PSO_init(Field* field)
 {
 	for (int i = 0; i < 5; i++) {
@@ -713,42 +803,66 @@ void PSO_init(Field* field)
 
 	for (int i = 0; i < 5; i++) {
 		double theta = atan2(field->selfRobots[i].position.y - field->ball.position.y, field->selfRobots[i].position.x - field->ball.position.x); //blue
-		particle_F[i] = 1 / (1 * Distance(field->selfRobots[i].position, field->ball.position) + 10 * theta);
+		particle_F[i] = 1 / (1 * Distance(field->selfRobots[i].position, field->ball.position) + 10 * fabs(theta));
 	}
 }
 
 void PSO_fresh(Field* field)
 {
+	
 	for (int i = 0; i < 5; i++) {
-		particle_V[i].x = 0.5 * particle_V[i].x + 2.0 * (Pbest[i].x - particle_X[i].x)
+		particle_V[i].x = 0.5 * particle_V[i].x + 0.5 * (Pbest[i].x - particle_X[i].x)
 			                                    + 2.0 * (Gbest.x    - particle_X[i].x);
-		particle_V[i].y = 0.5 * particle_V[i].y + 2.0 * (Pbest[i].y - particle_X[i].y)
+		particle_V[i].y = 0.5 * particle_V[i].y + 0.5 * (Pbest[i].y - particle_X[i].y)
 			                                    + 2.0 * (Gbest.y    - particle_X[i].y);
+
 
 		particle_X[i].x += particle_V[i].x;
 		particle_X[i].y += particle_V[i].y;
-	}
 
-	PredictBall2(1, field);
-	Gbest = { (float)PBP[0], (float)PBP[1] };
-
-	for (int i = 0; i < 5; i++) {
-		double theta = atan2(particle_X[i].y - field->ball.position.y, particle_X[i].x - field->ball.position.x); //blue
-		double f = 1 / (1 * Distance(particle_X[i], field->ball.position) + 10 * theta);
-		if (f < particle_F[i]) {
-			Pbest[i] = particle_X[i];
+		if (particle_X[i].x < -105) {
+			particle_X[i].x = -105;
+		}
+		if (particle_X[i].x > 105) {
+			particle_X[i].x = 105;
+		}
+		
+		if (particle_X[i].y < -85) {
+			particle_X[i].y = -85;
+		}
+		if (particle_X[i].y > 85) {
+			particle_X[i].y = 85;
 		}
 	}
+
+	double fMin = 6666.0;
+	Vector2 PbestMin;
+	for (int i = 0; i < 5; i++) {
+		double theta = atan2(particle_X[i].y - field->ball.position.y, particle_X[i].x - field->ball.position.x); //blue
+		double f = 1 / (1.0 * Distance(particle_X[i], field->ball.position) + 10 * fabs(theta));
+		
+		if (f > particle_F[i]) {
+			Pbest[i] = particle_X[i];
+		}
+		if (particle_F[i] < fMin && i != 0) {
+			PbestMin.x = Pbest[i].x;
+			PbestMin.y = Pbest[i].y;
+		}
+	}
+	/*PredictBall2(1, field);
+	Gbest = { (float)PBP[0], (float)PBP[1] };*/
+	Gbest = field->ball.position;
+	//Gbest = PbestMin;
 }
 
 void PSO_do(Field* field)
 {
 	int kickID = 5;
-	double fmin = 66666.0;
+	double ff = -1.0;
 	for (int i = 1; i < 5; i++) {
-		if (particle_F[i] < fmin) {
+		if (particle_F[i] > ff) {
 			kickID = i;
-			fmin = particle_F[i];
+			ff = particle_F[i];
 		}
 	}
 
@@ -759,7 +873,8 @@ void PSO_do(Field* field)
 		if (i == kickID) {
 			continue;
 		}
-		PositionPro(&(field->selfRobots[i]), i, particle_X[i].x, particle_X[i].y);
+		PositionPro(&(field->selfRobots[i]), i, Pbest[i].x, Pbest[i].y);
+		//PositionPro(&(field->selfRobots[i]), i, particle_X[i].x, particle_X[i].y);
 	}
 }
 
@@ -1051,15 +1166,15 @@ void dirShoot(Field* field, int id) {
 	//}
 
 	//防止溢出 !!!!!!!!!!!!参数应该要改？
-	if (ty > FTOP - 10.0 * 2.54 || ty < FBOT + 10.0 * 2.54 || tx < FLEFTX + 10.0 || tx > FRIGHTX - 10.0) {
+	if (ty > FTOP - 10.0 || ty < FBOT + 10.0 || tx < FLEFTX + 10.0 || tx > FRIGHTX - 10.0) {
 		PositionPro(&(field->selfRobots[id]), id, field->ball.position.x, field->ball.position.y);
 		return;
 	}
 
 	//do shooting
 
-	double dist = Distance(tx, field->selfRobots[id].position.x, ty, field->selfRobots[id].position.y);
-	if (dist < 1.5 * 2.54) {
+	double dist = Distance(tx, ty, field->selfRobots[id].position.x, field->selfRobots[id].position.y);
+	if (dist < 2.5 * 2.54) {
 		dirShootLock[id] = 1;
 		//Velocity(&(field->selfRobots[id]), 0, 0);
 		//RotateTo(&(field->selfRobots[id]), id, dirShootPos[id].x, dirShootPos[id].y);
@@ -1068,107 +1183,15 @@ void dirShoot(Field* field, int id) {
 		double y = (dirShootPos[id].y - field->ball.position.y) * 0.3 + field->ball.position.y;
 		go(&(field->selfRobots[id]), id, x, y);
 	}
-	else if (dist < 8.0 * 2.54) {
+	/*else if (dist < 8.0) {
 		Velocity(&(field->selfRobots[id]), 10, 10);
-	}
+	}*/
 	else {
 		PositionPro(&(field->selfRobots[id]), id, tx, ty);
 	}
 
 }
 
-void YellowdirShoot(Field* field, int id) {
-	//Position(&(field->selfRobots[id]), GLEFT, 0);
-
-	//还锁
-	//if (field->selfRobots[id].position.x < field->ball.position.x) {
-	//	dirShootLock[id] = 0;
-	//	double dy = field->selfRobots[id].position.y > field->ball.position.y ? 3.0 * 2.54 : -3.0 * 2.54;
-	//	;
-	//	if (dy + field->ball.position.y > FTOP - 1.0 * 2.54) {
-	//		dy *= -1;
-	//	}
-	//	if (dy + field->ball.position.y < FBOT + 1.0 * 2.54) {
-	//		dy *= -1;
-	//	}
-	//	go(&(field->selfRobots[id]), id, field->ball.position.x - 3.0 * 2.54, field->ball.position.y + dy);
-	//	return;
-	//}
-	//if (Distance(field->selfRobots[id].position, field->ball.position) > 15.0 * 2.54) {
-	//	//注意dist的值不能小于自己设的那个延长距离
-	//	dirShootLock[id] = 0;
-	//}
-
-	//射门
-	//if (dirShootLock[id]) {
-	//	//go(&(field->selfRobots[id]), id, dirShootPos[id].x, dirShootPos[id].y);
-	//	double x = -(dirShootPos[id].x - field->ball.position.x) * 0.3 + field->ball.position.x;
-	//	double y = -(dirShootPos[id].y - field->ball.position.y) * 0.3 + field->ball.position.y;
-	//	//Position(&(field->selfRobots[id]), x, y);
-	//	go(&(field->selfRobots[id]), id, x, y);
-	//	//还锁
-
-	//	return;
-	//}
-
-	//dirShootLock[id] = 0;
-	////简单判断
-	//double tx = field->ball.position.x - 10.0 * 2.54, ty;
-	//if (field->ball.position.y < GBOTY + 5.0) {
-	//	ty = F((GTOPY - field->ball.position.y) / (GLEFT - field->ball.position.x),
-	//		field->ball.position.x, field->ball.position.y, tx);
-	//	dirShootPos[id] = { GLEFT * 1.0, GBOTY * 0.3 + GTOPY * 0.7 };
-	//}
-	//else if (field->ball.position.y > GTOPY - 5.0) {
-	//	ty = F((GBOTY - field->ball.position.y) / (GLEFT - field->ball.position.x),
-	//		field->ball.position.x, field->ball.position.y, tx);
-	//	dirShootPos[id] = { GLEFT * 1.0, GBOTY * 0.7 + GTOPY * 0.3 };
-	//}
-	//else {
-	//	//需要细化
-	//	ty = F((GBOTY - field->ball.position.y) / (GLEFT - field->ball.position.x),
-	//		field->ball.position.x, field->ball.position.y, tx);
-	//	dirShootPos[id] = { GLEFT * 1.0, GBOTY * 0.7 + GTOPY * 0.3 };
-	//}
-
-
-	////if (env->opponent[0].pos.y > MID) {
-	////	//守门员在上面
-	////	ty = F((env->goalBounds.bottom - field->ball.position.y) / (env->goalBounds.left - field->ball.position.x),
-	////		field->ball.position.x, field->ball.position.y, tx);
-	////}
-	////else {
-	////	//守门员在下面
-	////	ty = F((env->goalBounds.top - field->ball.position.y) / (env->goalBounds.left - field->ball.position.x),
-	////		field->ball.position.x, field->ball.position.y, tx);
-	////}
-
-	////防止溢出
-	//if (ty > FTOP - 10.0 * 2.54 || ty < FBOT + 10.0 * 2.54 || tx < FLEFTX + 10.0 || tx > FRIGHTX - 10.0) {
-	//	PositionPro(&(field->selfRobots[id]), id, field->ball.position.x, field->ball.position.y);
-	//	return;
-	//}
-
-	////do shooting
-
-	//double dist = Distance(tx, field->selfRobots[id].position.x, ty, field->selfRobots[id].position.y);
-	//if (dist < 1.5 * 2.54) {
-	//	dirShootLock[id] = 1;
-	//	//Velocity(&(field->selfRobots[id]), 0, 0);
-	//	//RotateTo(&(field->selfRobots[id]), id, dirShootPos[id].x, dirShootPos[id].y);
-	//	//Position(&(field->selfRobots[id]), dirShootPos[id].x, dirShootPos[id].y);
-	//	double x = -(dirShootPos[id].x - field->ball.position.x) * 0.3 + field->ball.position.x;
-	//	double y = -(dirShootPos[id].y - field->ball.position.y) * 0.3 + field->ball.position.y;
-	//	go(&(field->selfRobots[id]), id, x, y);
-	//}
-	//else if (dist < 10.0 * 2.54) {
-	//	Velocity(&(field->selfRobots[id]), 10, 10);
-	//}
-	//else {
-	//	PositionPro(&(field->selfRobots[id]), id, tx, ty);
-	//}
-
-}
 bool BlueShoot(Field* field)
 {
 	//夹球射门
