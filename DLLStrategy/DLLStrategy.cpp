@@ -713,15 +713,14 @@ void kickBall_mid(Field* field, int id, Vector2 pos)
 	double y2 = field->ball.position.y;
 	double yy = F(k2, x2, y2, field->selfRobots[id].position.x);
 	if (field->selfRobots[id].position.x > field->ball.position.x &&
-		Distance(field->selfRobots[id].position, field->ball.position) < 5.0 ) {
+		Distance(field->selfRobots[id].position, field->ball.position) < 15.0 ) {
 
 		go(&(field->selfRobots[id]), id, pos.x, pos.y);
 		return;
 	}
 
 	if (field->selfRobots[id].position.x > field->ball.position.x && 
-		Distance(field->selfRobots[id].position, field->ball.position) < 10.0 && 
-		fabs(yy - field->selfRobots[id].position.y) < 5.0) {
+		fabs(yy - field->selfRobots[id].position.y) < 10.0) {
 
 		go(&(field->selfRobots[id]), id, field->ball.position.x, field->ball.position.y);
 		return;
