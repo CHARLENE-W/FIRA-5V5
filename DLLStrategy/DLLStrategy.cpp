@@ -11,10 +11,11 @@ JudgeType whichType;
 int Eventstate;
 int Judgestate;
 
-
+void Init(Field* field);//初始化 放在getplacement
 void See(Field* field); //预处理
 
 void Action(Field* field);
+void End(Field* field);//放在getinstruction
 
 /************************数据处理*********************************/
 void RegulateAngle(double& angle);
@@ -215,6 +216,8 @@ void GetPlacement(Field* field) {
 ********************************************具体实现****************************************/
 
 void Init(Field * field) {
+	//Init里不判断黄蓝，但需要变换原点
+
 	//env->userData = (void*) new Mydata;
 	Mydata* p;
 	p = (Mydata*)env->userData;
@@ -238,12 +241,12 @@ void Init(Field * field) {
 
 	for (int i = 0; i < 5; i++)
 	{//我方
-		p->robot[i].position.x = field->selfRobots[i].position.x;
-		p->robot[i].position.y = field->selfRobots[i].position.y;
+		p->robot[i].position.x = field->selfRobots[i].position.x + 110;
+		p->robot[i].position.y = field->selfRobots[i].position.y + 90;
 		p->robot[i].position.z = 0;
 
-		p->my_old_pos[i].x = field->selfRobots[i].position.x;
-		p->my_old_pos[i].y = field->selfRobots[i].position.y;
+		p->my_old_pos[i].x = field->selfRobots[i].position.x + 110;
+		p->my_old_pos[i].y = field->selfRobots[i].position.y + 90;
 		p->my_old_pos[i].z = 0;
 
 		p->my_speed[i].x = 0;
@@ -254,12 +257,12 @@ void Init(Field * field) {
 		p->my_old_velocity[i].y = 0;
 		p->my_old_velocity[i].z = 0;
 		//对方
-		p->opp[i].position.x = field->opponentRobots[i].position.x;
-		p->opp[i].position.y = field->opponentRobots[i].position.y;
+		p->opp[i].position.x = field->opponentRobots[i].position.x + 110;
+		p->opp[i].position.y = field->opponentRobots[i].position.y + 90;
 		p->opp[i].position.z = 0;
 
-		p->op_old_pos[i].x = field->opponentRobots[i].position.x;
-		p->op_old_pos[i].y = field->opponentRobots[i].position.y;
+		p->op_old_pos[i].x = field->opponentRobots[i].position.x + 110;
+		p->op_old_pos[i].y = field->opponentRobots[i].position.y + 90;
 		p->op_old_pos[i].z = 0;
 
 		p->op_speed[0].x = 0;
@@ -271,16 +274,16 @@ void Init(Field * field) {
 	p->locked = false;// 是否判断了场地 ??
 	p->mygrand = true;// 是 = 黄队//否 = 兰队 ??
 
-	p->ball_old.x = field->ball.position.x;
-	p->ball_old.y = field->ball.position.y;
+	p->ball_old.x = field->ball.position.x + 110;
+	p->ball_old.y = field->ball.position.y + 90;
 	p->ball_old.z = 0;
 
-	p->ball_cur.x = field->ball.position.x;
-	p->ball_cur.y = field->ball.position.y;
+	p->ball_cur.x = field->ball.position.x + 110;
+	p->ball_cur.y = field->ball.position.y + 90;
 	p->ball_cur.z = 0;
 
-	p->ball_pre.x = field->ball.position.x;
-	p->ball_pre.y = field->ball.position.y;
+	p->ball_pre.x = field->ball.position.x + 110;
+	p->ball_pre.y = field->ball.position.y + 90;
 	p->ball_pre.z = 0;
 
 	p->ball_speed.x = 0;
@@ -333,19 +336,19 @@ void See(Field* field) {
 	{
 		p->gameState = whichType;
 
-		p->ball_cur.x = field->ball.position.x + 110;	//球坐标变化
-		p->ball_cur.y = field->ball.position.y + 90;
+		p->ball_cur.x = -field->ball.position.x + 110;	//球坐标变化
+		p->ball_cur.y = -field->ball.position.y + 90;
 
 
 		for (i = 0; i < 5; i++)
 		{
 			p->robot[i].position.x = -field->selfRobots[i].position.x + 110;	//我方队员坐标变换
 			p->robot[i].position.y = -field->selfRobots[i].position.y + 90;
-			p->robot[i].rotation = field->selfRobots[i].rotation;
+			p->robot[i].rotation = field->selfRobots[i].rotation + 180;
 
 			p->opp[i].position.x = -field->opponentRobots[i].position.x + 110;	//对方坐标变换
 			p->opp[i].position.y = -field->opponentRobots[i].position.y + 90;
-			p->opp[i].rotation = -field->opponentRobots[i].rotation + 180;
+			p->opp[i].rotation = field->opponentRobots[i].rotation + 180;
 			RegulateAngle(p->opp[i].rotation);
 
 		}
@@ -448,6 +451,66 @@ void See(Field* field) {
 	}
 
 
+}
+
+
+void End(Field* field) {
+	//做一些清扫的工作
+	//做一些记录整理工作
+
+	Mydata* p;
+	p = (Mydata*)env->userData;
+
+	int i = 0;
+
+	for (i = 0; i < 5; i++) {//速度
+		field->selfRobots[i].wheel.leftSpeed = p->robot[i].wheel.velocityLeft;
+		field->selfRobots[i].wheel.rightSpeed = p->robot[i].wheel.velocityRight;
+
+		p->my_old_velocity[i].x = p->robot[i].wheel.velocityLeft;
+		p->my_old_velocity[i].y = p->robot[i].wheel.velocityRight;
+	}
+
+	if (p->mygrand) {///场地变换，球坐标变换
+		p->ball_old.x = field->ball.position.x + 110;		//球坐标变化
+		p->ball_old.y = field->ball.position.y + 90;
+		//p->ball_cur.z = env->currentBall.pos.z;
+
+		for (i = 0; i < 5; i++) {
+			p->my_old_pos[i].x = env->home[i].pos.x + 110;	//我方队员坐标变换
+			p->my_old_pos[i].y = env->home[i].pos.y + 90;
+			//p->robot[i].pos.z = env->home[i].pos.z ;
+			p->my_old_pos[i].z = env->home[i].rotation;
+
+			p->op_old_pos[i].x = env->opponent[i].pos.x + 110;	//对方坐标变换
+			p->op_old_pos[i].y = env->opponent[i].pos.y + 90;
+			//p->opp[i].pos.z = env->opponent[i].pos.z;
+			p->op_old_pos[i].z = env->opponent[i].rotation;
+			RegulateAngle(p->op_old_pos[i].z);
+		}
+	}
+	else {
+		p->ball_old.x = 110 - field->ball.position.x;		//球坐标变化
+		p->ball_old.y = 90  - field->ball.position.y;
+		//p->ball_cur.z = env->currentBall.pos.z;
+
+		for (i = 0; i < 5; i++) {
+			p->my_old_pos[i].x = 110 - field->selfRobots[i].position.x;	//我方队员坐标变换
+			p->my_old_pos[i].y = 90  - field->selfRobots[i].position.y;
+			//p->robot[i].pos.z = env->home[i].pos.z ;
+			p->my_old_pos[i].z = 180.0 + env->home[i].rotation;
+			RegulateAngle(p->my_old_pos[i].z);
+
+			p->op_old_pos[i].x = 110 - field->opponentRobots[i].position.x;	//对方坐标变换
+			p->op_old_pos[i].y = 90  - field->opponentRobots[i].position.y;
+			p->op_old_pos[i].z = 180.0 + env->opponent[i].rotation;
+			RegulateAngle(p->op_old_pos[i].z);
+		}
+	}
+
+	/*if (p->debug) {
+		fprintf(p->debugfile, "\n");
+	}*/
 }
 
 
