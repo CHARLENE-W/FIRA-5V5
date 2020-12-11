@@ -10,12 +10,11 @@ using namespace Adapter;
 JudgeType whichType;
 int Eventstate;
 int Judgestate;
-
-void Init(Field* field);//初始化 放在getplacement
+Mydata* p;
+void Init(Field* field);
 void See(Field* field); //预处理
-
+void End(Field* field);
 void Action(Field* field);
-void End(Field* field);//放在getinstruction
 
 /************************数据处理*********************************/
 void RegulateAngle(double& angle);
@@ -152,27 +151,26 @@ void GetTeamInfo(TeamInfo* teamInfo) {
 
 void GetInstruction(Field* field) {
 	SendLog(L"V/DLLStrategy:GetInstruction()");
-	/**/
-	Mydata* p;
-	p = (Mydata*)env->userData;
-
 	if (!p->locked)		// 是 判断场地了 ??
 	{//确定区域,blue or yellow
-		if (env->home[0].pos.x < 50.0)
+		if (field->selfRobots[0].position.x < 0)
 			p->mygrand = true; /// 是 = 黄队??
 		else
 			p->mygrand = false;
 		p->locked = true;
 	}
-	/**/
 	See(field);
 	Action(field);
+	End(field);
 }
 
 void GetPlacement(Field* field) {
+	p = new Mydata;
 	SendLog(L"V/DLLStrategy:GetPlacement()");
 	double bx = field->ball.position.x;
 	double by = field->ball.position.y;
+	//p = new Mydata;
+	Init(field);
 	if (Judgestate == 0)
 	{
 		field->selfRobots[4].position.x = 0;
@@ -215,12 +213,12 @@ void GetPlacement(Field* field) {
 /*******************************************************************************************
 ********************************************具体实现****************************************/
 
-void Init(Field * field) {
+void Init(Field* field) {
 	//Init里不判断黄蓝，但需要变换原点
 
 	//env->userData = (void*) new Mydata;
-	Mydata* p;
-	p = (Mydata*)env->userData;
+	//Mydata* p;
+	//p = (Mydata*)env->userData;
 
 	p->n = 125;			//these two veriaty is for the test funtion!
 	p->B_N = true;		//
@@ -302,10 +300,70 @@ void Init(Field * field) {
 
 }
 
+void End(Field* field) {
+	//做一些清扫的工作
+	//做一些记录整理工作
 
+//	Mydata* p;
+	//p = (Mydata*)env->userData;
+
+	int i = 0;
+	for (int i = 0; i < 5; i++) {
+		p->robot[i].wheel.leftSpeed = 120;
+		p->robot[i].wheel.rightSpeed = 120;
+	}
+	for (i = 0; i < 5; i++) {//速度
+		field->selfRobots[i].wheel.leftSpeed = p->robot[i].wheel.leftSpeed;
+		field->selfRobots[i].wheel.rightSpeed = p->robot[i].wheel.rightSpeed;
+
+		p->my_old_velocity[i].x = p->robot[i].wheel.leftSpeed;
+		p->my_old_velocity[i].y = p->robot[i].wheel.rightSpeed;
+	}
+
+	if (p->mygrand) {///场地变换，球坐标变换
+		p->ball_old.x = field->ball.position.x + 110;		//球坐标变化
+		p->ball_old.y = field->ball.position.y + 90;
+		//p->ball_cur.z = env->currentBall.pos.z;
+
+		for (i = 0; i < 5; i++) {
+			p->my_old_pos[i].x = field->selfRobots[i].position.x + 110;	//我方队员坐标变换
+			p->my_old_pos[i].y = field->selfRobots[i].position.y + 90;
+			//p->robot[i].pos.z = env->home[i].pos.z ;
+			p->my_old_pos[i].z = field->selfRobots[i].rotation;
+
+			p->op_old_pos[i].x = field->opponentRobots[i].position.x + 110;	//对方坐标变换
+			p->op_old_pos[i].y = field->opponentRobots[i].position.y + 90;
+			//p->opp[i].pos.z = env->opponent[i].pos.z;
+			p->op_old_pos[i].z = field->opponentRobots[i].rotation;
+			RegulateAngle(p->op_old_pos[i].z);
+		}
+	}
+	else {
+		p->ball_old.x = 110 - field->ball.position.x;		//球坐标变化
+		p->ball_old.y = 90 - field->ball.position.y;
+		//p->ball_cur.z = env->currentBall.pos.z;
+
+		for (i = 0; i < 5; i++) {
+			p->my_old_pos[i].x = 110 - field->selfRobots[i].position.x;	//我方队员坐标变换
+			p->my_old_pos[i].y = 90 - field->selfRobots[i].position.y;
+			//p->robot[i].pos.z = env->home[i].pos.z ;
+			p->my_old_pos[i].z = 180.0 + field->selfRobots[i].rotation;
+			RegulateAngle(p->my_old_pos[i].z);
+
+			p->op_old_pos[i].x = 110 - field->opponentRobots[i].position.x;	//对方坐标变换
+			p->op_old_pos[i].y = 90 - field->opponentRobots[i].position.y;
+			p->op_old_pos[i].z = 180.0 + field->opponentRobots[i].rotation;
+			RegulateAngle(p->op_old_pos[i].z);
+		}
+	}
+
+	/*if (p->debug) {
+		fprintf(p->debugfile, "\n");
+	}*/
+}
 void See(Field* field) {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	
+	//p = (Mydata*)field->userData;
 
 	int i = 0;
 
@@ -344,7 +402,8 @@ void See(Field* field) {
 		{
 			p->robot[i].position.x = -field->selfRobots[i].position.x + 110;	//我方队员坐标变换
 			p->robot[i].position.y = -field->selfRobots[i].position.y + 90;
-			p->robot[i].rotation = field->selfRobots[i].rotation + 180;
+			p->robot[i].rotation = field->selfRobots[i].rotation + 180.0;
+			RegulateAngle(p->robot[i].rotation);
 
 			p->opp[i].position.x = -field->opponentRobots[i].position.x + 110;	//对方坐标变换
 			p->opp[i].position.y = -field->opponentRobots[i].position.y + 90;
@@ -454,80 +513,20 @@ void See(Field* field) {
 }
 
 
-void End(Field* field) {
-	//做一些清扫的工作
-	//做一些记录整理工作
-
-	Mydata* p;
-	p = (Mydata*)env->userData;
-
-	int i = 0;
-
-	for (i = 0; i < 5; i++) {//速度
-		field->selfRobots[i].wheel.leftSpeed = p->robot[i].wheel.velocityLeft;
-		field->selfRobots[i].wheel.rightSpeed = p->robot[i].wheel.velocityRight;
-
-		p->my_old_velocity[i].x = p->robot[i].wheel.velocityLeft;
-		p->my_old_velocity[i].y = p->robot[i].wheel.velocityRight;
-	}
-
-	if (p->mygrand) {///场地变换，球坐标变换
-		p->ball_old.x = field->ball.position.x + 110;		//球坐标变化
-		p->ball_old.y = field->ball.position.y + 90;
-		//p->ball_cur.z = env->currentBall.pos.z;
-
-		for (i = 0; i < 5; i++) {
-			p->my_old_pos[i].x = env->home[i].pos.x + 110;	//我方队员坐标变换
-			p->my_old_pos[i].y = env->home[i].pos.y + 90;
-			//p->robot[i].pos.z = env->home[i].pos.z ;
-			p->my_old_pos[i].z = env->home[i].rotation;
-
-			p->op_old_pos[i].x = env->opponent[i].pos.x + 110;	//对方坐标变换
-			p->op_old_pos[i].y = env->opponent[i].pos.y + 90;
-			//p->opp[i].pos.z = env->opponent[i].pos.z;
-			p->op_old_pos[i].z = env->opponent[i].rotation;
-			RegulateAngle(p->op_old_pos[i].z);
-		}
-	}
-	else {
-		p->ball_old.x = 110 - field->ball.position.x;		//球坐标变化
-		p->ball_old.y = 90  - field->ball.position.y;
-		//p->ball_cur.z = env->currentBall.pos.z;
-
-		for (i = 0; i < 5; i++) {
-			p->my_old_pos[i].x = 110 - field->selfRobots[i].position.x;	//我方队员坐标变换
-			p->my_old_pos[i].y = 90  - field->selfRobots[i].position.y;
-			//p->robot[i].pos.z = env->home[i].pos.z ;
-			p->my_old_pos[i].z = 180.0 + env->home[i].rotation;
-			RegulateAngle(p->my_old_pos[i].z);
-
-			p->op_old_pos[i].x = 110 - field->opponentRobots[i].position.x;	//对方坐标变换
-			p->op_old_pos[i].y = 90  - field->opponentRobots[i].position.y;
-			p->op_old_pos[i].z = 180.0 + env->opponent[i].rotation;
-			RegulateAngle(p->op_old_pos[i].z);
-		}
-	}
-
-	/*if (p->debug) {
-		fprintf(p->debugfile, "\n");
-	}*/
-}
-
-
 int CheckBall(Field* field)
 {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 	int k;
 	int WIB;
 
-	double x1 = 21.5;
-	double x2 = 50.1;
-	double x3 = 78.6;
+	double x1 = 37.5;
+	double x2 = 110;
+	double x3 = 180;
 
-	double y1 = 25.1;
-	double y2 = 41.8;
-	double y3 = 58.6;
+	double y1 = 47.6;
+	double y2 = 90;
+	double y3 = 132.7;
 
 	Vector3D ball;
 	ball.x = p->ball_cur.x;
@@ -554,23 +553,23 @@ int CheckBall(Field* field)
 
 void CheckBlockInfo(Field* field)
 {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 	int i, j, k;
 	double x = 0;//相对块x值
 	double x_min = 0;//当前块x最小值
 	double x_max = 0;//当前块x最大值 
 	//double x1=6.8118;//区域x最小值
-	double x1 = 21.5;//区域x最小值 //bug fixed: 存在区域判断出错的问题
+	double x1 = 37.5;//区域x最小值 //bug fixed: 存在区域判断出错的问题
 	//double x2=78.6;//区域x最大值
-	double x2 = 93.4259;//区域x最大值 //bug fixed: 存在区域判断出错的问题
+	double x2 = 220;//区域x最大值 //bug fixed: 存在区域判断出错的问题
 
 	double y = 0;//相对块y值
 	double y_min = 0;//当前块y最小值
 	double y_max = 0;//当前块y最大值
-	double y1 = 6.3730;//区域y最小值
-	double y2 = 77.2392;//区域y最大值
-	int block_size = 2;//块大小
+	double y1 = 0;//区域y最小值
+	double y2 = 180;//区域y最大值
+	int block_size = 2 * 2.54;//块大小
 	int block_x_num = 0;//x块总数量
 	int block_y_num = 0;//y块总数量
 	int block_x_num_judge = 0;//判断x用
@@ -657,8 +656,8 @@ void CheckBlockInfo(Field* field)
 
 void PredictBall(Field* field, int steps)
 {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 
 	Vector3D predictball;
 	Vector3D ball_speed;
@@ -840,8 +839,8 @@ double Distance(Vector3D pos1, Vector2 pos2) {
 /*****************************************************************/
 void Velocity(Field* field, int robot, double vl, double vr)
 {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 
 	//vl,vr都有取值范围的!!!
 	if (vl > 125)vl = 125;
@@ -861,18 +860,21 @@ void Velocity(Field* field, int robot, double vl, double vr)
 
 Vector3D Meetball_p(Field* field, int robot)
 {//求出robot追到球的位置
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 	Vector3D meetpoint = { 0,0,-1 };
 	double dis = Distance(p->ball_cur, p->robot[robot].position);
 
 	double t = 0;
 	double vb = 0;
-	double v = 1.9;		//按照最大速度计算
+	double v = 1.9 * 2.54;		//按照最大速度计算
 	double pos_angle, b_sp_angle;
 
+	//人->球的夹角
 	pos_angle = Atan(p->ball_cur.y - p->robot[robot].position.y, p->ball_cur.x - p->robot[robot].position.x);
+	//球速角度
 	b_sp_angle = p->ball_speed.z;
+	//估算能不能追上球
 	vb = (p->ball_speed.y * p->ball_speed.y + p->ball_speed.x * p->ball_speed.x);
 	t = sin((b_sp_angle - pos_angle) * PI / 180);
 	t = vb * t * t;
@@ -949,7 +951,7 @@ double VelocityOne(double speed, double vl, double vr) {
 
 void Angle(Field* field, int robot, double angle) {
 	Mydata* p;
-	p = (Mydata*)field->userData;
+	//p = (Mydata*)field->userData;
 
 	double speed = 0;		//和pangle接轨
 	double accuracy = 1;
@@ -1045,8 +1047,8 @@ void Angle(Field* field, int robot, double angle) {
 }
 
 void Angle(Field* field, int robot, Vector3D pos) {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 
 	double speed = 0;		//和pangle接轨
 	double accuracy = 1;
@@ -1144,8 +1146,8 @@ void Angle(Field* field, int robot, Vector3D pos) {
 
 void PAngle(Field* field, int robot, double angle, double speed)
 {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 
 	double accuracy = 1;
 	double turnangle = 0, nextangle = 0;
@@ -1238,8 +1240,8 @@ void PAngle(Field* field, int robot, double angle, double speed)
 }
 
 void PositionAndStop(Field* field, int  robot, Vector3D pos, double bestangle, double limit) {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 
 	double anglespeedmax = 0;//控制转交速度的变量
 	double vmax = 125;//默认的跑位加速度
@@ -1426,8 +1428,8 @@ void GoaliePosition(Field* field, int  robot, Vector3D pos, double bestangle, do
 	//还有就是 被碰转后的转角过程 不能耽搁时间!!!
 	//转角是最危险的过程
 
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 
 	double anglespeedmax = 0;		//控制转交速度的变量
 	double vmax = 125;			//默认的跑位加速度
@@ -1607,8 +1609,8 @@ void GoaliePosition(Field* field, int  robot, Vector3D pos, double bestangle, do
 }
 
 void PositionAndStopX(Field* field, int  robot, Vector3D pos, double Xangle, double limit) {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 
 	double anglespeedmax = 0;		//控制转交速度的变量
 	double vmax = 125;
@@ -1763,8 +1765,8 @@ void PositionAndStopX(Field* field, int  robot, Vector3D pos, double Xangle, dou
 }
 
 void PositionBallX(Field* field, int  robot, Vector3D pos, double Xangle, double limit) {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 
 	double anglespeedmax = 0;		//控制转交速度的变量
 	double vmax = 125;
@@ -1848,8 +1850,8 @@ void PositionBallX(Field* field, int  robot, Vector3D pos, double Xangle, double
 
 void PositionAndThrough(Field* field, int robot, Vector3D pos, double MAX)
 {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 
 	double anglespeedmax = 0;		//控制转交速度的变量
 	double max = MAX;
@@ -1935,8 +1937,8 @@ void PositionAndThrough(Field* field, int robot, Vector3D pos, double MAX)
 
 void Kick(Field* field, int  robot, Vector2 ToPos)
 {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 
 	double LimitedCircle = 3;
 	Vector3D ball = Meetball_p(field, robot); //use the predictball position
@@ -2016,8 +2018,8 @@ void Kick(Field* field, int  robot, Vector2 ToPos)
 }
 void Kick(Field* field, int  robot, Vector3D ToPos)
 {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 
 	double LimitedCircle = 3;
 	Vector3D ball = Meetball_p(field, robot); //use the predictball position
@@ -2097,8 +2099,8 @@ void Kick(Field* field, int  robot, Vector3D ToPos)
 }
 
 void Kick(Field* field, int  robot, int robot1) {//踢人
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 	Vector3D RobotToBall;		//人和球的相对位置
 	RobotToBall.x = p->robot[robot1].position.x - p->robot[robot].position.x;
 	RobotToBall.y = p->robot[robot1].position.y - p->robot[robot].position.y;
@@ -2120,7 +2122,7 @@ void Kick(Field* field, int  robot, int robot1) {//踢人
 }
 
 void Kick(Field* field, int robot, int steps, double limits) {
-	Mydata* p = (Mydata*)field->userData;
+	//Mydata* p = (Mydata*)field->userData;
 	double dx, dy, angle;
 
 	dx = p->ball_cur.x - p->robot[robot].position.x;
@@ -2139,7 +2141,7 @@ void Kick(Field* field, int robot, int steps, double limits) {
 }
 
 void shoot(Field* field, int robot) {
-	Mydata* p = (Mydata*)field->userData;
+	//Mydata* p = (Mydata*)field->userData;
 	double w1, w2, alfa;
 	double dx, dy;
 	/*改过*/
@@ -2188,8 +2190,8 @@ void shoot(Field* field, int robot) {
 /*****************************************************************/
 
 bool Within(Field* field, int robot, double LENGTH) {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 
 	const double steps = 50;
 	int who = robot;
@@ -2213,8 +2215,8 @@ bool Within(Field* field, int robot, double LENGTH) {
 
 //////////////////////比赛状态/////////////////////
 void NormalGame(Field* field) {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 	PredictBall(field, 2);
 	if (p->ball_speed.x < 0.5 && p->ball_speed.y < 0, 5) Kick(field, 3, p->ball_pre);
 	Vector3D pos, begin, end;
@@ -2806,8 +2808,8 @@ void NormalGame(Field* field) {
 
 void Keeper(Field* field, int robot)
 {//先校正姿态，再去拦球
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 	Vector3D go;
 	double OX = GLEFT - (GTOP - GBOT);	// 该点为球门中心 向后移动半个球门
 	double OY = (GTOP + GBOT) / 2;			//球门中心	
@@ -2860,8 +2862,8 @@ void Keeper(Field* field, int robot)
 
 void Order(Field* field)
 {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 	int i, j, k, a[4];
 	double dis[4], b[4], temple;
 	double dy = 0;
@@ -3067,13 +3069,13 @@ void Order(Field* field)
 
 
 void FreeBallGame(Field* field) {//争球
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 
 }
 void PlaceBallGame(Field* field) {//开中场球
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 	Vector3D pos;
 	pos.x = (GLEFT + GRIGHT) / 2 - 10;
 	pos.y = 41.8060;
@@ -3085,25 +3087,25 @@ void PlaceBallGame(Field* field) {//开中场球
 }
 
 void PenaltyBallGame(Field* field) {//点球
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 	shoot(field, 4);
 }
 void FreeKickGame(Field* field) {//任意球
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 	shoot(field, 4);
 
 }
 void GoalKickGame(Field* field) {//门球
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 	shoot(field, 0);
 }
 
 void Sweep(Field* field, int robot) {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 	Vector3D pos;
 	int add_time = 0;
 	pos.x = p->ball_cur.x;
@@ -3130,8 +3132,8 @@ void Sweep(Field* field, int robot) {
 }
 
 int WhoseBall(Field* field) {
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 	double temp1, temp2, dis;
 	int k1, k2;
 
@@ -3163,8 +3165,8 @@ int WhoseBall(Field* field) {
 
 void Action(Field* field) {
 
-	Mydata* p;
-	p = (Mydata*)field->userData;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 	switch (whichType) {
 	case 0:
 		NormalGame(field);
