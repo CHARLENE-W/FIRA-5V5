@@ -1,91 +1,83 @@
 ﻿#include "stdafx.h"
 #include "platform.h"
 #include "adapter.h"
+#include "our_platform.h"
 #include<math.h>
+#include<algorithm>
+using namespace std;
 using namespace Simuro;
 using namespace Adapter;
 JudgeType whichType;
-
-
-typedef struct
-{
-	Vector2 myoldpos[5];
-	Vector2 MyOldPos[30][5];
-	Vector2 opoldpos[5];
-	int TEAM;
-}Mydata;
-double MID = 0;
-int TIMECOUNTER = 0;
 int Eventstate;
 int Judgestate;
-double Gate = 90;
-const double FTOP = 90;
-const double FBOT = -90;
-const double GTOPY = 20;
-const double GBOTY = -20;
-const double GRIGHT = 125;
-const double GLEFT = -125;
-const double FRIGHTX = 110;
-const double FLEFTX = -110;
-int IsBallBeforeDoor = 0, FuZhuShoot = 0;
+Mydata* p;
+void Init(Field* field);
+void See(Field* field); //预处理
+void End(Field* field);
+void Action(Field* field);
 
-/*ADD*/
-const double PI = 3.141592;
-double DISPLACEMENT[6] = { 0 };
-double COUNT1 = 0, COUNT2 = 0;//保存调用次数
-const double MAXL = 284.48;
-int NEEDROTATE[5] = { 1,1,1,1,1 }; //1 need，else not need
-int EV[6] = { 0 }; //estimate V估计的机器人的速度and the ball
-double TRACE[6][2][2] = { -1,-1,-1,-1, -1,-1, -1,-1, -1,-1, -1,-1, -1,-1, -1,-1, -1,-1, -1,-1, -1,-1, -1,-1 };
-double PBP[2] = { 0,0 };
+/************************数据处理*********************************/
+void RegulateAngle(double& angle);
+void RegulateAngle(float& angle);//规范angle的大小在（-180，+180）之间 
+double Atan(double y, double x);                                   //在坐标平面与水平面的夹角
+double Atan(Vector3D begin, Vector2 end);
+double Atan(Vector3D begin, Vector3D end); //求两个点之间的夹角(-180~180)
+double Distance(Vector3D pos1, Vector3D pos2);                    //求两点之间的距离
+double Distance(Vector3D pos1, Vector2 pos2);
+/************************辅助函数*********************************/
+double AngleOne(double omiga, double vl, double vr);                //计算在当前角速度omiga的基础上以左右轮速vl,vr控制，下一个周期达到的角速度
+double VelocityOne(double speed, double vl, double vr);             //计算在当前速度speed的基础上以左右轮速vl,vr控制，下一个周期达到的速度 返回下一个周期达到的速度
+void Velocity(Field* field, int robot, double vl, double vr);   //修改机器人左右轮速
+Vector3D Meetball_p(Field* field, int robot);
 
-//射门锁
-int dirShootLock[5] = { 0 };
-Vector2 dirShootPos[5] = { 0 };
 
-void avoidance(Field* field, int id);
-//计算用
-double Atan(double y, double x);
-double Atan(Vector2 begin, Vector2 end);
-void RegulateAng180(double& ang);
-void RegulateAng360(double& ang);
-double Distance(Vector2 p1, Vector2 p2);
-double Distance(double x1, double x2, double y1, double y2);
-void PredictBall2(double s, Field* field);
-double F(double k, double x0, double y0, double x);
 
-//更新全局变量
-void estimateV(Field* field);
+/************************运动处理*********************************/
+void Angle(Field* field, int robot, double angle);//转向angle
+void Angle(Field* field, int robot, Vector3D pos);//车转向目标点
+void PAngle(Field* field, int robot, double angle, double speed = 0);//让robot朝angle的方向跑，并且speed控制它的最大轮速
+void PositionAndStop(Field* field, int  robot, Vector3D pos, double bestangle = 90, double limit = 1);//(一般队员)让robot 跑到pos，并且停下来， bestangle 是停下来之后的朝向，limit	控制停在pos附近的距离
+void GoaliePosition(Field* field, int  robot, Vector3D pos, double bestangle = 90, double limit = 1.5);//（守门员）同上
+void PositionAndStopX(Field* field, int  robot, Vector3D pos, double Xangle = 90, double limit = 2); //让robot 跑到pos，并且停下来原地旋转，Xangle	旋转的角速度，limit	控制停在pos附近的距离
+void PositionBallX(Field* field, int  robot, Vector3D pos, double Xangle = 90, double limit = 3.5);  //让robot 跑到pos，并且停下来原地旋转，Xangle	旋转的角速度,limit	控制球和robot的距离,如果球和队员的距离大于limit则不旋转
+void PositionAndThrough(Field* field, int robot, Vector3D pos, double MAX = 125);//让robot以最快MAX 冲向pos，中间没有减速控制
 
-//基础动作
-void Velocity(Robot* robot, int vl, int vr);
-double RotateTo(Robot* robot, int rID, const double desX, const double desY);
-void to(Robot* robot, int RID, double x, double y);
-void go(Robot* robot, int rID, const double x, const double y);
-void Position(Robot* robot, double x, double y);
-void PositionPro(Robot* robot, double x, double y);
-void avoidance(Field* field, int id);
-/*ADD*/
 
-//进攻
-double KTOP, KBTO;
-void Attack(Field* field);
-void LineAttack(Field* field);
-bool YellowShoot(Field* field);
 
-void Yattack(int robot1, int robot2, int robot3, Field* field);
-int pos(Vector2 pos);
-int Ypos(Vector2 pos);
+/************************踢球动作*********************************/
+//9：56
 
-bool YcanKshoot(Field* field, int id);
-void YdirShoot(Field* field, int id);
+void Kick(Field* field, int  robot, Vector2 ToPos);       //让robot把球踢到ToPos的位置
+void Kick(Field* field, int  robot, Vector3D ToPos);
+void Kick(Field* field, int  robot, int robot1);             //让robot 以与robot1的角度跑向它
+void Kick(Field* field, int robot, int steps, double limits);    //向着steps个周期后球的位置踢
+void shoot(Field* field, int robot);                           //射门
 
-void Goliar(Field* field);
-void activeDefender(Field* field, Robot* robot, int riD);
-void Defend(Field* field, int rID);
-void MidDefend(Field* field, int id1, int id2);
-void NegDefend(Field* field, int id);
-void keeper(Robot* robot, int rID, Field* field);
+
+// wan
+/************************防止犯规*********************************/
+bool Within(Field* field, int robot, double LENGTH);            //判断robot队员和球的距离是否再LENGTH规定的范围内返回true  or false
+
+/**************************比赛*********************************/
+void NormalGame ( Field *field );
+void FreeBallGame(Field* field);
+void PlaceBallGame(Field* field);
+void PenaltyBallGame(Field* field);
+void FreeKickGame(Field* field);
+void GoalKickGame(Field* field);
+
+/****************************补充**********************************/
+void Sweep(Field* field, int robot);
+int  WhoseBall(Field* field);
+
+
+void Keeper(Field* field, int robot);
+void Order(Field* field);
+
+int CheckBall(Field* field);
+void CheckBlockInfo(Field* field);
+void PredictBall(Field* field, int steps = 1);
+
 /*main*/
 void OnEvent(EventType type, void* argument) {
 	SendLog(L"V/DLLStrategy:OnEvent()");
@@ -149,6 +141,7 @@ void OnEvent(EventType type, void* argument) {
 	}
 }
 
+
 void GetTeamInfo(TeamInfo* teamInfo) {
 	SendLog(L"V/DLLStrategy:GetTeamInfo()");
 	static const wchar_t teamName[] = L"BITCS1";
@@ -158,1031 +151,3046 @@ void GetTeamInfo(TeamInfo* teamInfo) {
 
 void GetInstruction(Field* field) {
 	SendLog(L"V/DLLStrategy:GetInstruction()");
-	//attack(1, 2, 3, field);
-	//dirShoot(field, 4);
-//	avoidance(field, 4);
-	//go(&(field->selfRobots[2]), 2, 0, 0);
-	COUNT2++;
-	estimateV(field);
-	//BlueShoot(field);
-	if (field->ball.position.x > 0)
-	{
-		Yattack(2, 3, 4, field);
-		Defend(field, 1);
-		keeper(&(field->selfRobots[0]),0,field);
+	if (!p->locked)		// 是 判断场地了 ??
+	{//确定区域,blue or yellow
+		if (field->selfRobots[0].position.x < 0)
+			p->mygrand = true; /// 是 = 黄队??
+		else
+			p->mygrand = false;
+		p->locked = true;
 	}
-		
-	else
-	{
-		MidDefend(field, 4, 3);
-		Defend(field, 1);
-		Goliar(field);
-		NegDefend(field, 2);
-	}
-
+	See(field);
+	Action(field);
+	End(field);
 }
 
 void GetPlacement(Field* field) {
+	double v = 10;
+
+	//SendLog(L"speed"+v);
+	p = new Mydata;
 	SendLog(L"V/DLLStrategy:GetPlacement()");
 	double bx = field->ball.position.x;
 	double by = field->ball.position.y;
+	//p = new Mydata;
+	Init(field);
 	if (Judgestate == 0)
 	{
 		field->selfRobots[4].position.x = 0;
 		field->selfRobots[4].position.y = 20;
 
-		field->selfRobots[3].position.x = -40;
-		field->selfRobots[3].position.y = -9;
+		field->selfRobots[3].position.x = 40;
+		field->selfRobots[3].position.y = 9;
 
-		field->selfRobots[2].position.x = -40;
-		field->selfRobots[2].position.y = 9;
+		field->selfRobots[2].position.x = 40;
+		field->selfRobots[2].position.y = -9;
 
-		field->selfRobots[1].position.x = -40;
+		field->selfRobots[1].position.x = 40;
 		field->selfRobots[1].position.y = 0;
 	}
 	else if (Judgestate == 2)
 	{
-		field->selfRobots[4].position.x = -50;
-		field->selfRobots[4].position.y = -50;
+		field->selfRobots[4].position.x = 50;
+		field->selfRobots[4].position.y = 50;
 
 		field->selfRobots[0].position.y = 0;
 	}
 	else if (Judgestate == 1)
 	{
 		field->ball.position.y = 23;
-		field->ball.position.x = -97;
+		field->ball.position.x = 97;
 
-		field->selfRobots->position.y = 0;
+		field->selfRobots[0].position.y = 0;
 	}
 }
+
+
+
+
 
 /*main*/
 
 
 
 
+/*******************************************************************************************
+********************************************具体实现****************************************/
 
-//计算用
+void Init(Field* field) {
+	//Init里不判断黄蓝，但需要变换原点
+
+	//env->userData = (void*) new Mydata;
+	//Mydata* p;
+	//p = (Mydata*)env->userData;
+
+	p->n = 125;			//these two veriaty is for the test funtion!
+	p->B_N = true;		//
+
+	p->debug = true;//是 = 调试
+
+	p->time[1] = 0;//初始化时间
+	p->time[0] = 125;//初始化时间
+
+	p->bgoalball = 0;//初始化非求门球
+	p->nfreeball = 0;//初始化非求门球
+	p->nplaceball = 0;
+
+	p->ActiveAttacker = -1;
+	p->NegativeAttacker = -1;
+	p->Attacker = -1;
+	p->chooserobot = 0;
+
+	for (int i = 0; i < 5; i++)
+	{//我方
+		p->robot[i].position.x = field->selfRobots[i].position.x + 110;
+		p->robot[i].position.y = field->selfRobots[i].position.y + 90;
+		p->robot[i].position.z = 0;
+
+		p->my_old_pos[i].x = field->selfRobots[i].position.x + 110;
+		p->my_old_pos[i].y = field->selfRobots[i].position.y + 90;
+		p->my_old_pos[i].z = 0;
+
+		p->my_speed[i].x = 0;
+		p->my_speed[i].y = 0;
+		p->my_speed[i].z = 0;
+
+		p->my_old_velocity[i].x = 0;
+		p->my_old_velocity[i].y = 0;
+		p->my_old_velocity[i].z = 0;
+		//对方
+		p->opp[i].position.x = field->opponentRobots[i].position.x + 110;
+		p->opp[i].position.y = field->opponentRobots[i].position.y + 90;
+		p->opp[i].position.z = 0;
+
+		p->op_old_pos[i].x = field->opponentRobots[i].position.x + 110;
+		p->op_old_pos[i].y = field->opponentRobots[i].position.y + 90;
+		p->op_old_pos[i].z = 0;
+
+		p->op_speed[0].x = 0;
+		p->op_speed[0].y = 0;
+		p->op_speed[0].z = 0;
+
+	}
+
+	p->locked = false;// 是否判断了场地 ??
+	p->mygrand = true;// 是 = 黄队//否 = 兰队 ??
+
+	p->ball_old.x = field->ball.position.x + 110;
+	p->ball_old.y = field->ball.position.y + 90;
+	p->ball_old.z = 0;
+
+	p->ball_cur.x = field->ball.position.x + 110;
+	p->ball_cur.y = field->ball.position.y + 90;
+	p->ball_cur.z = 0;
+
+	p->ball_pre.x = field->ball.position.x + 110;
+	p->ball_pre.y = field->ball.position.y + 90;
+	p->ball_pre.z = 0;
+
+	p->ball_speed.x = 0;
+	p->ball_speed.y = 0;
+	p->ball_speed.z = 0;
+
+	//if (p->debug)
+	//{
+	//	p->debugfile = fopen("c:\\strategy\\SCU_introduction.txt", "w");
+	//	if (!p->debugfile)
+	//		p->debugfile = fopen("c:\\strategy\\SCU_introduction.doc", "w");
+	//	if (!p->debugfile)
+	//		p->debug = false;
+	//	//		fclose(p->debugfile); 
+	//}
+
+}
+
+void End(Field* field) {
+	//做一些清扫的工作
+	//做一些记录整理工作
+
+//	Mydata* p;
+	//p = (Mydata*)env->userData;
+
+	int i = 0;
+	/*for (int i = 0; i < 5; i++) {
+		p->robot[i].wheel.leftSpeed = 200;
+		p->robot[i].wheel.rightSpeed = 200;
+	}*/
+	for (i = 0; i < 5; i++) {//速度
+		field->selfRobots[i].wheel.leftSpeed = p->robot[i].wheel.leftSpeed;
+		field->selfRobots[i].wheel.rightSpeed = p->robot[i].wheel.rightSpeed;
+
+		p->my_old_velocity[i].x = p->robot[i].wheel.leftSpeed;
+		p->my_old_velocity[i].y = p->robot[i].wheel.rightSpeed;
+		
+	}
+
+	if (p->mygrand) {///场地变换，球坐标变换
+		p->ball_old.x = field->ball.position.x + 110;		//球坐标变化
+		p->ball_old.y = field->ball.position.y + 90;
+		//p->ball_cur.z = env->currentBall.pos.z;
+
+		for (i = 0; i < 5; i++) {
+			p->my_old_pos[i].x = field->selfRobots[i].position.x + 110;	//我方队员坐标变换
+			p->my_old_pos[i].y = field->selfRobots[i].position.y + 90;
+			//p->robot[i].pos.z = env->home[i].pos.z ;
+			p->my_old_pos[i].z = field->selfRobots[i].rotation;
+
+			p->op_old_pos[i].x = field->opponentRobots[i].position.x + 110;	//对方坐标变换
+			p->op_old_pos[i].y = field->opponentRobots[i].position.y + 90;
+			//p->opp[i].pos.z = env->opponent[i].pos.z;
+			p->op_old_pos[i].z = field->opponentRobots[i].rotation;
+			RegulateAngle(p->op_old_pos[i].z);
+		}
+	}
+	else {
+		p->ball_old.x = 110 - field->ball.position.x;		//球坐标变化
+		p->ball_old.y = 90 - field->ball.position.y;
+		//p->ball_cur.z = env->currentBall.pos.z;
+
+		for (i = 0; i < 5; i++) {
+			p->my_old_pos[i].x = 110 - field->selfRobots[i].position.x;	//我方队员坐标变换
+			p->my_old_pos[i].y = 90 - field->selfRobots[i].position.y;
+			//p->robot[i].pos.z = env->home[i].pos.z ;
+			p->my_old_pos[i].z = 180.0 + field->selfRobots[i].rotation;
+			RegulateAngle(p->my_old_pos[i].z);
+
+			p->op_old_pos[i].x = 110 - field->opponentRobots[i].position.x;	//对方坐标变换
+			p->op_old_pos[i].y = 90 - field->opponentRobots[i].position.y;
+			p->op_old_pos[i].z = 180.0 + field->opponentRobots[i].rotation;
+			RegulateAngle(p->op_old_pos[i].z);
+		}
+	}
+
+	/*if (p->debug) {
+		fprintf(p->debugfile, "\n");
+	}*/
+}
+void See(Field* field) {
+	
+	//p = (Mydata*)field->userData;
+
+	int i = 0;
+
+	if (p->mygrand)//如果，我方是黄队的话
+	{///场地变换，球坐标变换
+		//我方是黄队
+
+		p->gameState = whichType;
+
+		p->ball_cur.x = field->ball.position.x + 110;	//球坐标变化
+		p->ball_cur.y = field->ball.position.y + 90;
+
+
+		for (i = 0; i < 5; i++)
+		{
+			p->robot[i].position.x = field->selfRobots[i].position.x + 110;	//我方队员坐标变换
+			p->robot[i].position.y = field->selfRobots[i].position.y + 90;
+			p->robot[i].rotation = field->selfRobots[i].rotation;
+
+			p->opp[i].position.x = field->opponentRobots[i].position.x + 110;	//对方坐标变换
+			p->opp[i].position.y = field->opponentRobots[i].position.y + 90;
+			p->opp[i].rotation = field->opponentRobots[i].rotation;
+			RegulateAngle(p->opp[i].rotation);
+
+		}
+	}
+	else
+	{
+		p->gameState = whichType;
+
+		p->ball_cur.x = -field->ball.position.x + 110;	//球坐标变化
+		p->ball_cur.y = -field->ball.position.y + 90;
+
+
+		for (i = 0; i < 5; i++)
+		{
+			p->robot[i].position.x = -field->selfRobots[i].position.x + 110;	//我方队员坐标变换
+			p->robot[i].position.y = -field->selfRobots[i].position.y + 90;
+			p->robot[i].rotation = field->selfRobots[i].rotation + 180.0;
+			RegulateAngle(p->robot[i].rotation);
+
+			p->opp[i].position.x = -field->opponentRobots[i].position.x + 110;	//对方坐标变换
+			p->opp[i].position.y = -field->opponentRobots[i].position.y + 90;
+			p->opp[i].rotation = field->opponentRobots[i].rotation + 180;
+			RegulateAngle(p->opp[i].rotation);
+
+		}
+	}
+
+	////第一次处理速度  (上次)
+	for (i = 0; i < 5; i++)
+	{///speed
+		p->my_speed[i].x = (p->robot[i].position.x - p->my_old_pos[i].x);//70为比例系数，有待调整
+		p->my_speed[i].y = (p->robot[i].position.y - p->my_old_pos[i].y);
+		p->my_speed[i].z = Atan(p->my_speed[i].y, p->my_speed[i].x);//得到我方机器人的 运动方向 和转角速度,考虑中
+
+		p->op_speed[i].x = (p->opp[i].position.x - p->op_old_pos[i].x);
+		p->op_speed[i].y = (p->opp[i].position.y - p->op_old_pos[i].y);
+		p->op_speed[i].z = Atan(p->op_speed[i].y, p->op_speed[i].x);//得到敌方机器人
+	}
+
+	p->ball_speed.x = p->ball_cur.x - p->ball_old.x;
+	p->ball_speed.y = p->ball_cur.y - p->ball_old.y;
+	p->ball_speed.z = Atan(p->ball_speed.y, p->ball_speed.x); //得到球的信息量
+////以上部不可直接作为当前数据
+///下面开始处理当前的真实数据
+//////处理robot坐标
+	double v, a, b, c, omiga, angle;
+	for (i = 0; i < 5; i++)
+	{
+		omiga = p->robot[i].rotation - p->my_old_pos[i].z;
+		RegulateAngle(omiga);
+		omiga = AngleOne(omiga, p->my_old_velocity[i].x, p->my_old_velocity[i].y);
+		c = p->robot[i].rotation;
+		p->robot[i].rotation += omiga;
+		RegulateAngle(p->robot[i].rotation);
+
+		v = sqrt((p->my_speed[i].x * p->my_speed[i].x) + (p->my_speed[i].y * p->my_speed[i].y));
+		angle = p->robot[i].rotation - p->my_speed[i].z;
+		RegulateAngle(angle);
+		if (angle > -90 && angle < 90)
+			v = v;
+		else
+			v = -v;
+
+		v = VelocityOne(v, p->my_old_velocity[i].x, p->my_old_velocity[i].y);
+		a = p->robot[i].position.x;
+		b = p->robot[i].position.y;
+
+		p->robot[i].position.x += v * cos(p->robot[i].rotation * PI / 180);
+		p->robot[i].position.y += v * sin(p->robot[i].rotation * PI / 180);
+		///处理撞墙
+		//不处理最好
+
+		////处理撞墙		
+		p->my_old_pos[i].x = a;
+		p->my_old_pos[i].y = b;
+		p->my_old_pos[i].z = c;
+
+		p->my_speed[i].x = (p->robot[i].position.x - p->my_old_pos[i].x);	//70为比例系数，有待调整
+		p->my_speed[i].y = (p->robot[i].position.y - p->my_old_pos[i].y);
+		p->my_speed[i].z = Atan(p->my_speed[i].y, p->my_speed[i].x);
+	}
+
+	/////////	 预测球的坐标
+
+	double x, y;
+	x = p->ball_cur.x;
+	y = p->ball_cur.y;
+
+	PredictBall(field);		//求到现在球的位置
+	p->ball_cur = p->ball_pre;
+
+	p->ball_old.x = x;
+	p->ball_old.y = y;
+
+	PredictBall(field);		//预测下一步球的位置
+
+	p->ball_speed.x = p->ball_cur.x - p->ball_old.x;
+	p->ball_speed.y = p->ball_cur.y - p->ball_old.y;
+	p->ball_speed.z = Atan(p->ball_speed.y, p->ball_speed.x);
+	/////////	 预测球的坐标
+
+	p->WIB = CheckBall(field);
+	CheckBlockInfo(field);
+	///计时
+	///很有用处的
+	p->time[1]++;
+	if (p->time[1] == 60) {
+		p->time[1] = 0;
+		p->time[0]++;
+	}
+	if (p->ball_cur.y > 42) {
+		p->ActiveAttacker = 3;
+		p->Attacker = 1;
+		p->NegativeAttacker = 4;
+		p->Defender = 2;
+	}
+	else {
+		p->ActiveAttacker = 4;
+		p->Attacker = 2;
+		p->NegativeAttacker = 3;
+		p->Defender = 1;
+	}
+
+
+}
+
+
+int CheckBall(Field* field)
+{
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+	int k;
+	int WIB;
+
+	double x1 = 37.5;
+	double x2 = 110;
+	double x3 = 180;
+
+	double y1 = 47.6;
+	double y2 = 90;
+	double y3 = 132.7;
+
+	Vector3D ball;
+	ball.x = p->ball_cur.x;
+	ball.y = p->ball_cur.y;
+
+	if (ball.x <= x1)
+		k = 0;
+	else if (ball.x > x1 && ball.x <= x2)
+		k = 4;
+	else if (ball.x > x2 && ball.x <= x3)
+		k = 8;
+	else if (ball.x > x3)
+		k = 12;
+	if (ball.y <= y1)
+		WIB = 1 + k;
+	else if (ball.y > y1 && ball.y <= y2)
+		WIB = 2 + k;
+	else if (ball.y > y2 && ball.y <= y3)
+		WIB = 3 + k;
+	else if (ball.y > y3)
+		WIB = 4 + k;
+	return WIB;
+}
+void CheckBlockInfo(Field* field)
+{
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+	int i, j, k;
+	double x = 0;//相对块x值
+	double x_min = 0;//当前块x最小值
+	double x_max = 0;//当前块x最大值 
+	//double x1=6.8118;//区域x最小值
+	double x1 = 37.5;//区域x最小值 //bug fixed: 存在区域判断出错的问题
+	//double x2=78.6;//区域x最大值
+	double x2 = 220;//区域x最大值 //bug fixed: 存在区域判断出错的问题
+
+	double y = 0;//相对块y值
+	double y_min = 0;//当前块y最小值
+	double y_max = 0;//当前块y最大值
+	double y1 = 0;//区域y最小值
+	double y2 = 180;//区域y最大值
+	int block_size = 2 * 2.54;//块大小
+	int block_x_num = 0;//x块总数量
+	int block_y_num = 0;//y块总数量
+	int block_x_num_judge = 0;//判断x用
+	int block_y_num_judge = 0;//判断y用
+
+	block_x_num = (x2 - x1) / block_size;
+	block_x_num++;//算入边界块
+	block_y_num = (y2 - y1) / block_size;
+	block_y_num++;//算入边界块
+
+	//循环赋初值队员的块编号
+	for (k = 0; k < 5; k++) {
+		p->my_block_pos[k].x = -1;
+		p->my_block_pos[k].y = -1;
+		p->op_block_pos[k].x = -1;
+		p->op_block_pos[k].y = -1;
+	}
+
+	for (i = 0; i < block_x_num; i++) {
+		for (j = 0; j < block_y_num; j++) {
+			x = i * block_size;
+			x_min = x + x1;
+			x_max = x_min + block_size;
+
+			y = j * block_size;
+			y_min = y + y1;
+			y_max = y_min + block_size;
+
+			//将当前块的中心x和y坐标，存入block当中
+			p->block[i][j].x = x_min + (block_size / 2);
+			if (block_y_num != 0) {
+				block_y_num_judge = block_y_num;//fix bug
+				block_y_num_judge--;//fix bug
+				if (j == block_y_num_judge) {//fix bug
+				//if(j == (block_y_num--)){//bug
+					p->block[i][j].y = y2;
+				}
+				else {
+					p->block[i][j].y = y_min + (block_size / 2);
+				}
+			}
+			else {
+				p->block[i][j].y = y2;
+			}
+
+			//循环读取队员的块编号
+			for (k = 0; k < 5; k++) {
+				if ((p->robot[k].position.x >= x_min) && (p->robot[k].position.y >= y_min) && (p->robot[k].position.x < x_max) && (p->robot[k].position.y < y_max)) {
+					p->block_my[i][j] = 1;
+					p->my_block_pos[k].x = i;
+					p->my_block_pos[k].y = j;
+				}
+				else {
+					p->block_my[i][j] = 0;
+				}
+				if ((p->opp[k].position.x >= x_min) && (p->opp[k].position.y >= y_min) && (p->opp[k].position.x < x_max) && (p->opp[k].position.y < y_max)) {
+					p->block_op[i][j] = 1;
+					p->op_block_pos[k].x = i;
+					p->op_block_pos[k].y = j;
+				}
+				else {
+					p->block_op[i][j] = 0;
+				}
+			}
+
+			//读取球的块坐标
+			if ((p->ball_cur.x >= x_min) && (p->ball_cur.y >= y_min) && (p->ball_cur.x < x_max) && (p->ball_cur.y < y_max)) {
+				p->block_ball[i][j] = 1;
+				p->ball_block_pos.x = i;
+				p->ball_block_pos.y = j;
+			}
+			else {
+				p->block_ball[i][j] = 0;
+			}
+		}
+	}
+
+	//存入块信息
+	p->block_min.x = 0;
+	p->block_min.y = 0;
+	p->block_max.x = block_x_num;
+	p->block_max.y = block_y_num;
+}
+
+void PredictBall(Field* field, int steps)
+{
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+
+	Vector3D predictball;
+	Vector3D ball_speed;
+	int i = 0;
+
+	predictball.x = p->ball_cur.x;			//赋初值
+	predictball.y = p->ball_cur.y;
+	ball_speed.x = p->ball_speed.x;
+	ball_speed.y = p->ball_speed.y;
+	ball_speed.z = p->ball_speed.z;
+
+	for (i = 0; i < steps; i++) {
+		predictball.x += ball_speed.x;
+		predictball.y += ball_speed.y;
+		//处理撞墙
+		if (predictball.x > GRIGHT) {
+			predictball.x -= ball_speed.x;	//retern
+			predictball.y -= ball_speed.y;
+			ball_speed.x *= -SPEED_NORMAL;	//loose 
+			ball_speed.y *= SPEED_TANGENT;
+			predictball.x += ball_speed.x;	//go on
+			predictball.y += ball_speed.y;
+		}
+		else if (predictball.x < GLEFT) {
+			predictball.x -= ball_speed.x;	//retern
+			predictball.y -= ball_speed.y;
+			ball_speed.x *= -SPEED_NORMAL;	//loose 
+			ball_speed.y *= SPEED_TANGENT;
+			predictball.x += ball_speed.x;	//go on
+			predictball.y += ball_speed.y;
+		}
+		else if (predictball.y < GBOT) {
+			predictball.x -= ball_speed.x;	//retern
+			predictball.y -= ball_speed.y;
+			ball_speed.x *= SPEED_TANGENT;	//loose 
+			ball_speed.y *= -SPEED_NORMAL;
+			predictball.x += ball_speed.x;	//go on
+			predictball.y += ball_speed.y;
+		}
+		else if (predictball.y > GTOP) {
+			predictball.x -= ball_speed.x;	//retern
+			predictball.y -= ball_speed.y;
+			ball_speed.x *= SPEED_TANGENT;	//loose 
+			ball_speed.y *= -SPEED_NORMAL;
+			predictball.x += ball_speed.x;	//go on
+			predictball.y += ball_speed.y;
+		}
+		/////////////////对于边界时的设置
+		if (predictball.x + predictball.y > GRIGHT + GTOP - CORNER) {//右上
+			double vx, vy;
+			vy = 0.7071 * ball_speed.y + 0.7071 * ball_speed.x;	//变换1
+			vx = -0.7071 * ball_speed.y + 0.7071 * ball_speed.x;
+
+			predictball.x -= ball_speed.x;	//retern
+			predictball.y -= ball_speed.y;
+			vx *= SPEED_TANGENT;	//loose 
+			vy *= -SPEED_NORMAL;
+			ball_speed.y = 0.7071 * vy - 0.7071 * vx;	//变换2
+			ball_speed.x = 0.7071 * vy + 0.7071 * vx;
+			predictball.x += ball_speed.x;	//go on
+			predictball.y += ball_speed.y;
+
+		}
+		else if (predictball.x + predictball.y < GLEFT + GBOT + CORNER) {//左下
+			double vx, vy;
+			vy = 0.7071 * ball_speed.y + 0.7071 * ball_speed.x;	//变换1
+			vx = -0.7071 * ball_speed.y + 0.7071 * ball_speed.x;
+			predictball.x -= ball_speed.x;	//retern
+			predictball.y -= ball_speed.y;
+			vx *= SPEED_TANGENT;	//loose 
+			vy *= -SPEED_NORMAL;
+			ball_speed.y = 0.7071 * vy - 0.7071 * vx;	//变换2
+			ball_speed.x = 0.7071 * vy + 0.7071 * vx;
+			predictball.x += ball_speed.x;	//go on
+			predictball.y += ball_speed.y;
+		}
+		else if (predictball.x - predictball.y > GRIGHT - GBOT - CORNER) {//右下
+			double vx, vy;
+			vy = 0.7071 * ball_speed.y - 0.7071 * ball_speed.x;	//变换1
+			vx = 0.7071 * ball_speed.y + 0.7071 * ball_speed.x;
+			predictball.x -= ball_speed.x;	//retern
+			predictball.y -= ball_speed.y;
+			vx *= SPEED_TANGENT;	//loose 
+			vy *= -SPEED_NORMAL;
+			ball_speed.y = 0.7071 * vy + 0.7071 * vx;	//变换2
+			ball_speed.x = -0.7071 * vy + 0.7071 * vx;
+			predictball.x += ball_speed.x;	//go on
+			predictball.y += ball_speed.y;
+		}
+		else if (predictball.y - predictball.x > GTOP - GLEFT - CORNER) {//左上
+			double vx, vy;
+			vy = 0.7071 * ball_speed.y - 0.7071 * ball_speed.x;	//变换1
+			vx = 0.7071 * ball_speed.y + 0.7071 * ball_speed.x;
+			predictball.x -= ball_speed.x;	//retern
+			predictball.y -= ball_speed.y;
+			vx *= SPEED_TANGENT;	//loose 
+			vy *= -SPEED_NORMAL;
+			ball_speed.y = 0.7071 * vy + 0.7071 * vx;	//变换2
+			ball_speed.x = -0.7071 * vy + 0.7071 * vx;
+			predictball.x += ball_speed.x;	//go on
+			predictball.y += ball_speed.y;
+		}
+		//处理四角		
+	}
+	p->ball_pre.x = predictball.x;
+	p->ball_pre.y = predictball.y;
+	p->ball_pre.z = Atan(ball_speed.y, ball_speed.x);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void RegulateAngle(float& angle) {
+	while (angle >= 180.0)angle -= 360.0;
+	while (angle < -180.0)angle += 360.0;
+}
+
+void RegulateAngle(double& angle) {
+	while (angle >= 180.0)angle -= 360.0;
+	while (angle < -180.0)angle += 360.0;
+}
+
 double Atan(double y, double x) {
-
 	if (x != 0.0 || y != 0.0)
 		return 180 * atan2(y, x) / PI;
 	else return 0.0;
 }
-double Atan(Vector2 begin, Vector2 end)
-{
+
+double Atan(Vector3D begin, Vector3D end) {
 	double y, x;
 	y = end.y - begin.y;
 	x = end.x - begin.x;
 	return Atan(y, x);
 }
-void RegulateAng180(double& ang)
+double Atan(Vector3D begin, Vector2 end) {
+	double y, x;
+	y = end.y - begin.y;
+	x = end.x - begin.x;
+	return Atan(y, x);
+}
+
+
+/****************************直线处理*********************************/
+//1.Distance  两点之间距离
+/*******************************************************************/
+double Distance(Vector3D pos1, Vector3D pos2) {
+	return sqrt((pos1.x - pos2.x) * (pos1.x - pos2.x) + (pos1.y - pos2.y) * (pos1.y - pos2.y));
+}
+double Distance(Vector3D pos1, Vector2 pos2) {
+	return sqrt((pos1.x - pos2.x) * (pos1.x - pos2.x) + (pos1.y - pos2.y) * (pos1.y - pos2.y));
+}
+
+
+/************************辅助函数*********************************/
+//1.Velocity 修改左右轮速
+//2.CheckBall返回分区号
+//3.PredictBall 预测经过 steps 个周期之后球的位置
+//4.Meetball_p 求出robot追到球的位置
+//5.order 角色分配
+//6.AngleOne计算在当前角速度omiga的基础上以左右轮速vl,vr控制，下一个周期达到的角速度
+//7.VelocityOne 计算在当前速度speed的基础上以左右轮速vl,vr控制，下一个周期达到的速度 返回下一个周期达到的速度
+/*****************************************************************/
+void Velocity(Field* field, int robot, double vl, double vr)
 {
-	//规范角到(-180， 180]
-	while (ang <= -180) {
-		ang += 360;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+
+	//vl,vr都有取值范围的!!!
+	if (vl > 125)vl = 125;
+	if (vl < -125)vl = -125;
+	if (vr > 125)vr = 125;
+	if (vr < -125)vr = -125;
+
+	if (true) {//速度的特别控制//重要，否则小车是颤抖的
+		if (vl == 0 && vr != 0)
+			vl = 0.00001;
+		if (vr == 0 && vl != 0)
+			vr = 0.00001;
 	}
-	while (ang > 180) {
-		ang -= 360;
-	}
-}
-void RegulateAng360(double& ang)
-{
-	//规范角到[0， 360)
-	while (ang < 0) {
-		ang += 360;
-	}
-	while (ang >= 360) {
-		ang -= 360;
-	}
+	p->robot[robot].wheel.leftSpeed = vl;
+	p->robot[robot].wheel.rightSpeed = vr;
 }
 
-double Distance(Vector2 p1, Vector2 p2) {
-	return sqrt((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y));
-}
-double Distance(double x1, double y1, double x2, double y2)
-{
-	return sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
-}
-void PredictBall2(double s, Field* field)
-{
-	double dx, dy;
-	double xs;
-	xs = s;
-	dx = TRACE[5][1][0] - TRACE[5][0][0];
-	dy = TRACE[5][1][1] - TRACE[5][0][1];
-	PBP[0] = field->ball.position.x + dx * xs ;
-	PBP[1] = field->ball.position.y + dy * xs ;
+Vector3D Meetball_p(Field* field, int robot)
+{//求出robot追到球的位置
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+	Vector3D meetpoint = { 0,0,-1 };
+	double dis = Distance(p->ball_cur, p->robot[robot].position);
 
-}
-double F(double k, double x0, double y0, double x)
-{
-	return k * (x - x0) + y0;
-}
+	double t = 0;
+	double vb = 0;
+	double v = 1.9 * 2.54;		//按照最大速度计算
+	double pos_angle, b_sp_angle;
 
-
-//更新全局变量
-void estimateV(Field* field) {
-	double dx, dy;
-	double k;
-	int ym = 0;
-
-	k = 6.8;
-	if (TRACE[0][0][0] == -1)
+	//人->球的夹角
+	pos_angle = Atan(p->ball_cur.y - p->robot[robot].position.y, p->ball_cur.x - p->robot[robot].position.x);
+	//球速角度
+	b_sp_angle = p->ball_speed.z;
+	//估算能不能追上球
+	vb = (p->ball_speed.y * p->ball_speed.y + p->ball_speed.x * p->ball_speed.x);
+	t = sin((b_sp_angle - pos_angle) * PI / 180);
+	t = vb * t * t;
+	v = v * v;
+	if (v > t)
 	{
-		for (ym = 0; ym < 5; ym++) {
-			TRACE[ym][0][0] = field->selfRobots[ym].position.x;
-			TRACE[ym][0][1] = field->selfRobots[ym].position.y;
-			TRACE[ym][1][0] = field->selfRobots[ym].position.x;
-			TRACE[ym][1][1] = field->selfRobots[ym].position.y;
+		v = sqrt(v - t) + sqrt(vb) * cos((b_sp_angle - pos_angle) * PI / 180);
+		if (v > 0.1)
+		{
+			t = dis / v;	//得到步数
+			meetpoint.x = p->ball_speed.x * t + p->ball_cur.x;
+			meetpoint.y = p->ball_speed.y * t + p->ball_cur.y;
+			meetpoint.z = t;
 		}
-		TRACE[5][0][0] = field->ball.position.x;
-		TRACE[5][0][1] = field->ball.position.y;
-		TRACE[5][1][0] = field->ball.position.x;
-		TRACE[5][1][1] = field->ball.position.y;
 	}
-	if (COUNT2 - COUNT1 >= 10) {
-		for (ym = 0; ym < 6; ym++) {
-			dx = TRACE[ym][1][0] - TRACE[ym][0][0];
-			dy = TRACE[ym][1][1] - TRACE[ym][0][1];
-			DISPLACEMENT[ym] = sqrt(dx * dx + dy * dy);
-			TRACE[ym][0][0] = TRACE[ym][1][0];
-			TRACE[ym][0][1] = TRACE[ym][1][1];
-			EV[ym] = int(DISPLACEMENT[ym] * k);
+	return meetpoint;
+}
+
+double AngleOne(double omiga, double vl, double vr)
+{
+	//		omiga = p->robot[i].rotation - p->my_old_pos[i].z ;
+	//		RegulateAngle(omiga);
+	if (vl > 125)vl = 125;
+	if (vl < -125)vl = -125;
+	if (vr > 125)vr = 125;
+	if (vr < -125)vr = -125;
+	double angle = (vr - vl) / 2;
+
+	RegulateAngle(omiga);
+	omiga += ANGLE_A * (ANGLE_B * angle - omiga);
+	if (vr > vl) {
+		if (vl >= 0 || vr <= 0) {
+			omiga -= 4 * ANGLE_K * angle * angle;
 		}
-		COUNT1 = COUNT2;
+	}
+	else if (vr < vl) {
+		if (vr >= 0 || vl <= 0) {
+			omiga += 4 * ANGLE_K * angle * angle;
+		}
+	}
+	RegulateAngle(omiga);		//应该没有大于180 的角速度罢
+	return omiga;
+}
+
+double VelocityOne(double speed, double vl, double vr) {
+	if (vl > 125)vl = 125;
+	if (vl < -125)vl = -125;
+	if (vr > 125)vr = 125;
+	if (vr < -125)vr = -125;
+
+	if (speed > 3 || speed < -3)
+		speed = 0;
+	if (vl == 0 && vr == 0)
+		speed += -SPEED_ODD * speed;
+	else
+		speed += SPEED_A * (SPEED_B * (vl + vr) / 2 - speed);
+	return speed;
+}
+
+
+
+
+/****************************基本动作*********************************/
+//1.Angle 转向angle
+//2.Angle让robot转到正对pos的方向
+//3.PAngle 让robot朝angle的方向跑，并且speed控制它的最大轮速
+//4.PositionAndStop 让robot 跑到pos，并且停下来， bestangle 是停下来之后的朝向，limit	控制停在pos附近的距离
+//5.GoaliePosition（守门员）同上
+//6.PositionAndStopX 让robot 跑到pos，并且停下来原地旋转，Xangle	旋转的角速度，limit	控制停在pos附近的距离
+//7.PositionBallX 让robot 跑到pos，并且停下来原地旋转，Xangle	旋转的角速度,limit	控制球和robot的距离,如果球和队员的距离大于limit则不旋转
+//8.PositionAndThrough 让robot以最快MAX 冲向pos，中间没有减速控制
+/*******************************************************************/
+
+void Angle(Field* field, int robot, double angle) {
+	Mydata* p;
+	//p = (Mydata*)field->userData;
+
+	double speed = 0;		//和pangle接轨
+	double accuracy = 1;
+	double turnangle = 0, nextangle = 0;
+	double FF = 125;		//最大减速度
+
+	turnangle = angle - p->robot[robot].rotation;
+	RegulateAngle(turnangle);
+	if (turnangle < 1 && turnangle >-1) {
+		Velocity(field, robot, 0, 0);
+		return;
+	}
+	else if (turnangle < 2 && turnangle >-2)
+		FF = 10;
+	else if (turnangle > -3 && turnangle < 3)
+		FF = 15;
+	else if (turnangle > -5 && turnangle < 5)
+		FF = 30;
+
+	double v = p->robot[robot].rotation - p->my_old_pos[robot].z;
+	RegulateAngle(v);
+
+	double v1 = v;
+	double f = 0;	//相当于减速时,右轮速度，
+//	int n=0;
+	bool turnleft = true;			//判断小车是否是该向左转
+	double a = ANGLE_A;
+	double b = ANGLE_B;
+
+	if (turnangle > 90) {
+		turnleft = false;
+		turnangle -= 180;
+	}
+	else if (turnangle > 0) {
+		turnleft = true;
+	}
+	else if (turnangle > -90) {
+		turnleft = false;
+	}
+	else { //<-90时
+		turnleft = true;
+		turnangle += 180;
+	}
+
+	if (turnleft) {//
+		f = -FF;
+		v1 = AngleOne(v1, speed + f, speed - f);		//v1+=a *( -b *f-v1);
+		nextangle += v1;
+		do {//whether to reduce
+			//收敛!!
+			v1 = AngleOne(v1, speed - f, speed + f);//+= a *( b *f-v1);		// v1   
+			nextangle += v1;
+		} while (v1 > 0);
+		nextangle -= v1;
+		if (nextangle < turnangle) {//不满足减速条件 所以 f 取相反数
+			Velocity(field, robot, speed + f, speed - f);
+		}
+		else {//reduce
+			v1 = AngleOne(v, speed - f, speed + f);  //v + a *( b *f-v);
+			if (v1 < 0) {
+				do {//该降低功率了
+					f++;
+					v1 = AngleOne(v, speed - f, speed + f);  //v + a *( b *f-v);
+				} while (v1 < turnangle && f < FF);
+			}
+			Velocity(field, robot, speed - f, speed + f);
+		}
+	}
+	else {//
+		f = FF;
+		v1 = AngleOne(v1, speed + f, speed - f);		//v1+=a *( -b *f-v1);
+		nextangle += v1;
+		do {//whether to reduce
+			v1 = AngleOne(v1, speed - f, speed + f);//+= a *( b *f-v1);		// v1   
+			nextangle += v1;
+		} while (v1 < 0);
+		nextangle -= v1;
+		if (nextangle > turnangle) {//不满足减速条件 所以 f 取相反数
+			Velocity(field, robot, speed + f, speed - f);
+		}
+		else {//reduce
+			v1 = AngleOne(v, speed - f, speed + f);  //v + a *( b *f-v);
+			if (v1 > 0) {
+				do {//该降低功率了
+					f--;
+					v1 = AngleOne(v, speed - f, speed + f);  //v + a *( b *f-v);
+				} while (v1 > turnangle && f > -FF);
+			}
+			Velocity(field, robot, speed - f, speed + f);
+		}
+	}
+
+}
+
+void Angle(Field* field, int robot, Vector3D pos) {
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+
+	double speed = 0;		//和pangle接轨
+	double accuracy = 1;
+	double turnangle = 0, nextangle = 0;
+	double FF = 125;		//最大减速度
+	double angle = 0;
+	angle = Atan(p->robot[robot].position, pos);
+
+	turnangle = angle - p->robot[robot].rotation;
+	RegulateAngle(turnangle);
+
+	if (turnangle < 1 && turnangle >-1) {
+		Velocity(field, robot, 0, 0);
+		return;
+	}
+	else if (turnangle < 2 && turnangle >-2)
+		FF = 10;
+	else if (turnangle > -3 && turnangle < 3)
+		FF = 15;
+	else if (turnangle > -5 && turnangle < 5)
+		FF = 30;
+
+	double v = p->robot[robot].rotation - p->my_old_pos[robot].z;
+	RegulateAngle(v);
+	double v1 = v;
+	double f = 0;	//相当于减速时,右轮速度，
+//	int n=0;
+	bool turnleft = true;			//判断小车是否是该向左转
+	double a = ANGLE_A;
+	double b = ANGLE_B;
+
+	if (turnangle > 90) {
+		turnleft = false;
+		turnangle -= 180;
+	}
+	else if (turnangle > 0) {
+		turnleft = true;
+	}
+	else if (turnangle > -90) {
+		turnleft = false;
 	}
 	else {
-		for (ym = 0; ym < 5; ym++) {
-			TRACE[ym][1][0] = field->selfRobots[ym].position.x;
-			TRACE[ym][1][1] = field->selfRobots[ym].position.y;
+		turnleft = true;
+		turnangle += 180;
+	}
+
+	if (turnleft) {//
+		f = -FF;
+		v1 = AngleOne(v1, speed + f, speed - f);		//v1+=a *( -b *f-v1);
+		nextangle += v1;
+		do {//whether to reduce
+			//收敛!!
+			v1 = AngleOne(v1, speed - f, speed + f);//+= a *( b *f-v1);		// v1   
+			nextangle += v1;
+		} while (v1 > 0);
+		nextangle -= v1;
+		if (nextangle < turnangle) {//不满足减速条件 所以 f 取相反数
+			Velocity(field, robot, speed + f, speed - f);
 		}
-		TRACE[5][1][0] = field->ball.position.x;
-		TRACE[5][1][1] = field->ball.position.y;
+		else {//reduce	
+			v1 = AngleOne(v, speed - f, speed + f);  //v + a *( b *f-v);
+			if (v1 < 0) {
+				do {//该降低功率了
+					f++;
+					v1 = AngleOne(v, speed - f, speed + f);  //v + a *( b *f-v);
+				} while (v1 < turnangle && f < FF);
+			}
+			Velocity(field, robot, speed - f, speed + f);
+		}
+	}
+	else {//
+		f = FF;
+		v1 = AngleOne(v1, speed + f, speed - f);		//v1+=a *( -b *f-v1);
+		nextangle += v1;
+		do {//whether to reduce
+			v1 = AngleOne(v1, speed - f, speed + f);//+= a *( b *f-v1);		// v1   
+			nextangle += v1;
+		} while (v1 < 0);
+		nextangle -= v1;
+		if (nextangle > turnangle) {//不满足减速条件 所以 f 取相反数
+			Velocity(field, robot, speed + f, speed - f);
+		}
+		else {//reduce
+			v1 = AngleOne(v, speed - f, speed + f);  //v + a *( b *f-v);
+			if (v1 > 0) {
+				do {//该降低功率了
+					f--;
+					v1 = AngleOne(v, speed - f, speed + f);  //v + a *( b *f-v);
+				} while (v1 > turnangle && f > -FF);
+			}
+			Velocity(field, robot, speed - f, speed + f);
+		}
 	}
 }
 
-//基础动作
-void Velocity(Robot* robot, int vl, int vr)
+void PAngle(Field* field, int robot, double angle, double speed)
 {
-	if (vl > 125)
-		vl = 125;
-	if (vr > 125)
-		vr = 125;
-	if (vl < -125)
-		vl = -125;
-	if (vr < -125)
-		vr = -125;
-	robot->wheel.leftSpeed = vl;
-	robot->wheel.rightSpeed = vr;
-}
-double RotateTo(Robot* robot, int rID, const double desX, const double desY)
-{
-	double alpha, length;
-	double sinValue;
-	int direction;
-	double aRRobot, aR;
-	double dy;
-	double beta;
-	int v;
-	double vk, k2 = 87;
-	int error[6] = { 30,20,15,13,11,9 };
-	int curError;
-	int ll;
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 
-	vk = 1;
-	length = sqrt((robot->position.x - desX) * (robot->position.x - desX) + (robot->position.y - desY) *
-		(robot->position.y - desY));
-	dy = desY - robot->position.y;
-	if (dy < 0)
-		dy = dy * -1;
-	sinValue = dy / length;
+	double accuracy = 1;
+	double turnangle = 0, nextangle = 0;
+	turnangle = angle - p->robot[robot].rotation;
+	RegulateAngle(turnangle);
+	double v = p->robot[robot].rotation - p->my_old_pos[robot].z;
+	RegulateAngle(v);
+	double v1 = v;
+	double FF = 125;		//最大减速度
+	double f = 0;	//相当于减速时,右轮速度，
+//	int n=0;
+	bool turnleft = true;			//判断小车是否是该向左转
+	double a = ANGLE_A;
+	double b = ANGLE_B;
 
-	if (sinValue > 1)
-		sinValue = 1;
-	if (sinValue < -1)
-		sinValue = -1;
-	alpha = asinf(sinValue) / PI * 180;
-	if ((desY < robot->position.y) && (desX < robot->position.x))//左下
-		alpha = -180 + alpha;
-	else if ((desY < robot->position.y) && (desX > robot->position.x))//右下
-		alpha = -alpha;
-	else if ((desY > robot->position.y) && (desX < robot->position.x))//左上
-		alpha = 180 - alpha;
-	else if ((desY > robot->position.y) && (desX > robot->position.x))//右上
-		alpha = alpha;
-	else if ((desY == robot->position.y) && (desX < robot->position.x))//左
-		alpha = 180;
-	else if ((desY == robot->position.y) && (desX > robot->position.x))//右
-		alpha = 0;//把角转化为系统角度
-
-	if (robot->rotation < 0)
-		aRRobot = 360 + robot->rotation;
-	else
-		aRRobot = robot->rotation;
-
-	if (alpha < 0)
-		aR = 360 + alpha;
-	else
-		aR = alpha;
-
-	beta = fabs(aRRobot - aR);
-	if (aRRobot - aR > 0 && beta < 180)
-		direction = 1;
-	if (aRRobot - aR > 0 && beta > 180)
-		direction = -1;
-	if (aRRobot - aR < 0 && beta < 180)
-		direction = -1;
-	if (aRRobot - aR < 0 && beta > 180)
-		direction = 1;
-
-	//计算旋转方向
-	if (beta > 180)
-		beta = 360 - beta;
-	else
-		beta = beta;
-
-	v = int(beta / 180 * 60 - vk);
-	if (v < 0)//速度控制
-		v = 0;
-	if (v > 60)
-		v = 60;
-	if (v > 20)
-		v = 60;
-	if (direction == 1) {
-		Velocity(robot, int(0.3 * EV[rID]) + v, int(0.3 * EV[rID]) - v);
-	}
-	else if (direction == -1) {
-		Velocity(robot, int(0.3 * EV[rID]) - v, int(0.3 * EV[rID]) + v);
-	}
-	//选取误差限
-	for (ll = 0; ll < 6; ll++) {
-		if (length >= MAXL / 6 * (ll) && length < MAXL / 6 * (ll + 1))
-			curError = error[ll];
-	}
-	if (beta > curError)
-		NEEDROTATE[rID] = 1;
-	else
-		NEEDROTATE[rID] = 0;
-	return beta;
-}
-void to(Robot* robot, int RID, double x, double y)
-{
-	int vBest[6] = { 30,50,60,70,100,125 };
-	double length;
-	double dx, dy;
-	int lt;
-	double l = 3 * 2.54;
-	dx = robot->position.x - x;
-	dy = robot->position.y - y;
-	length = sqrt(dx * dx + dy * dy);
-	lt = int(length / (112 * 2.54) * 6);
-	double beta = RotateTo(robot, RID, x, y);
-	RotateTo(robot, RID, x, y);
-	if (NEEDROTATE[RID] != 1)
-	{
-		Velocity(robot, vBest[lt - 1], vBest[lt - 1]);
-		if (length < l + 10)
-		{
-			Velocity(robot, 22, 22);
-		}
-		if (length < l + 5)
-		{
-			Velocity(robot, 16, 16);
-		}
-		if (length < l)
-		{
-			Velocity(robot, 11, 11);
-		}
-		if (length < 5)
-		{
-			Velocity(robot, 7, 7);
-		}
-		if (length < 2.54)
-		{
-			Velocity(robot, 4, 4);
-		}
-		if (length < 1.8)
-		{
-			Velocity(robot, 2, 2);
-		}if (length < 1)
-		{
-			Velocity(robot, 1, 1);
-		}
-		if (length < 0.5)
-		{
-			Velocity(robot, 0, 0);
-		}
-	}
-}
-void go(Robot* robot, int rID, const double x, const double y) {
-	double toX, toY;
-	int vl, vr;
-
-	toX = x;
-	toY = y;
-	vl = 125;
-	vr = 125;
-	RotateTo(robot, rID, toX, toY);
-	if (NEEDROTATE[rID] != 1) {
-		robot->wheel.leftSpeed = vl;
-		robot->wheel.rightSpeed = vr;
-	}
-}
-void Position(Robot* robot, double x, double y)
-{
-	int desired_angle = 0, theta_e = 0, d_angle = 0, vl, vr, vc = 120;
-
-	double dx, dy, d_e, Ka = 10.0 / 90.0;
-	dx = x - robot->position.x;					//计算出当前位置与目标位置的相对位移
-	dy = y - robot->position.y;
-
-	d_e = sqrt(dx * dx + dy * dy);			//计算出直线距离
-
-	//计算出角度
-	if (dx == 0 && dy == 0)
-		desired_angle = 90;
-	else
-		desired_angle = (int)(180. / PI * atan2((double)(dy), (double)(dx)));
-	theta_e = desired_angle - (int)robot->rotation;
-
-	//当前机器人角度与机器人到目标点的夹角
-	while (theta_e > 180) theta_e -= 360;
-	while (theta_e < -180) theta_e += 360;
-
-	if (d_e > 100.)
-		Ka = 17. / 90.;
-	else if (d_e > 50)
-		Ka = 19. / 90.;
-	else if (d_e > 30)
-		Ka = 21. / 90.;
-	else if (d_e > 20)
-		Ka = 23. / 90.;
-	else
-		Ka = 25. / 90.;
-
-	if (theta_e > 95 || theta_e < -95)
-	{
-		theta_e += 180;
-
-		if (theta_e > 180)
-			theta_e -= 360;
-		if (theta_e > 80)
-			theta_e = 80;
-		if (theta_e < -80)
-			theta_e = -80;
-		if (d_e < 5.0 && abs(theta_e) < 40)
-			Ka = 0.1;
-		vr = (int)(-vc * (1.0 / (1.0 + exp(-3.0 * d_e)) - 0.3) + Ka * theta_e);
-		vl = (int)(-vc * (1.0 / (1.0 + exp(-3.0 * d_e)) - 0.3) - Ka * theta_e);
-	}
-
-	else if (theta_e < 85 && theta_e > -85)
-	{
-		if (d_e < 5.0 && abs(theta_e) < 40)
-			Ka = 0.1;
-		vr = (int)(vc * (1.0 / (1.0 + exp(-3.0 * d_e)) - 0.3) + Ka * theta_e);
-		vl = (int)(vc * (1.0 / (1.0 + exp(-3.0 * d_e)) - 0.3) - Ka * theta_e);
-	}
-
-	else
-	{
-		vr = (int)(+.17 * theta_e);
-		vl = (int)(-.17 * theta_e);
-	}
-
-	Velocity(robot, vl, vr);
-}
-void PositionPro(Robot* robot, int id, double x, double y) {
-	double tAng = Atan(y - robot->position.y, x - robot->position.x);
-	double da = tAng - robot->rotation;
-	RegulateAng180(da);
-	if (da > 80 || da < -80) {
-		go(robot, id, x, y);
+	bool face;
+	if (turnangle < 90 && turnangle > -90) {//检查是否正面跑位	
+		face = true;
+		speed = speed;
 	}
 	else {
-		//go(robot, id, x, y);
-		Position(robot, x, y);
+		face = false;
+		speed = -speed;
+	}
+	if (turnangle > 90) {
+		turnleft = false;
+		turnangle -= 180;
+	}
+	else if (turnangle > 0) {
+		turnleft = true;
+	}
+	else if (turnangle > -90) {
+		turnleft = false;
+	}
+	else {
+		turnleft = true;
+		turnangle += 180;
+	}
+
+	if (turnleft)
+	{//
+		f = -FF;
+		v1 = AngleOne(v1, speed + f, speed - f);		//v1+=a *( -b *f-v1);
+		nextangle += v1;
+		do {//whether to reduce
+			//收敛!!
+			v1 = AngleOne(v1, speed - f, speed + f);//+= a *( b *f-v1);		// v1   
+			nextangle += v1;
+		} while (v1 > 0);
+		nextangle -= v1;
+		if (nextangle < turnangle)
+		{//不满足减速条件 所以 f 取相反数
+			Velocity(field, robot, speed + f, speed - f);
+		}
+		else {//reduce	
+			v1 = AngleOne(v, speed - f, speed + f);  //v + a *( b *f-v);
+			if (v1 < 0) {
+				do {//该降低功率了
+					f++;
+					v1 = AngleOne(v, speed - f, speed + f);  //v + a *( b *f-v);
+				} while (v1 < turnangle && f < 125);
+			}
+			Velocity(field, robot, speed - f, speed + f);
+		}
+	}
+	else {//
+		f = FF;
+		v1 = AngleOne(v1, speed + f, speed - f);		//v1+=a *( -b *f-v1);
+		nextangle += v1;
+		do {//whether to reduce
+			v1 = AngleOne(v1, speed - f, speed + f);//+= a *( b *f-v1);		// v1   
+			nextangle += v1;
+		} while (v1 < 0);
+		nextangle -= v1;
+		if (nextangle > turnangle)
+		{//不满足减速条件 所以 f 取相反数
+			Velocity(field, robot, speed + f, speed - f);
+		}
+		else {//reduce
+			v1 = AngleOne(v, speed - f, speed + f);  //v + a *( b *f-v);
+			if (v1 > 0) {
+				do {//该降低功率了
+					f--;
+					v1 = AngleOne(v, speed - f, speed + f);  //v + a *( b *f-v);
+				} while (v1 > turnangle && f > -125);
+			}
+			Velocity(field, robot, speed - f, speed + f);
+		}
 	}
 }
-void avoidance(Field* field, int id)
-{
-	bool duiren = false;
-	for (int i = 0; i <= 4; i++) {
-		if (i != id) {
 
-			//先查找距离是否相近，在判断是否在前进方向上
-			if (Distance(field->selfRobots[i].position, field->selfRobots[id].position) < 6) {
-				double deltaY = field->selfRobots[i].position.y - field->selfRobots[id].position.y;
-				double deltaX = field->selfRobots[i].position.x - field->selfRobots[id].position.x;
-				double angle_home_another = Atan(fabs(deltaY), fabs(deltaX));
-				if (deltaX < 0 && deltaY>0) { angle_home_another = 180 - angle_home_another; }
+void PositionAndStop(Field* field, int  robot, Vector3D pos, double bestangle, double limit) {
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+
+	double anglespeedmax = 0;//控制转交速度的变量
+	double vmax = 125;//默认的跑位加速度
+	double Limitedangle = 2;//默认减速范围
+
+	if (limit < 0.5)
+		limit = 0.5;
+	double Limiteddis = limit;//减速范围有一个下限，保证不会来回跑动
+
+	double  distance;//robot和目标点的距离
+	double turnangle, posangle, vangle;//转动角度 ，目标点相对robot的角度，速度的绝对角度
+	double dx, dy;//pos  和robot的坐标差
+	double a = SPEED_A;//参数
+	double b = SPEED_B;
+	double v, v1;//临时保存速度的大小!!!
+	double f = vmax;//加速度变量
+	double s = 0;	//预测的减速位移(路程)
+	int n = 0;//跑位的步数
+	bool face = true;//判断小车是否是正面前进
+
+	v = sqrt(p->my_speed[robot].x * p->my_speed[robot].x + p->my_speed[robot].y * p->my_speed[robot].y);
+	//临时保存速度的大小!!!
+	dx = pos.x - p->robot[robot].position.x;		//pos  和robot的坐标差
+	dy = pos.y - p->robot[robot].position.y;
+
+	distance = Distance(p->robot[robot].position, pos);
+	posangle = Atan(dy, dx);
+
+	turnangle = p->robot[robot].rotation - posangle;		//转动角度 
+	RegulateAngle(turnangle);
+
+	if (turnangle > 90) {//判断小车是否是正面前进
+		face = false;
+		turnangle -= 180;
+	}
+	else if (turnangle < -90) {
+		face = false;
+		turnangle += 180;
+	}
+	else {
+		face = true;
+	}
+
+	vangle = p->my_speed[robot].z - p->robot[robot].rotation;		//速度的方向和robot正面的夹角
+	RegulateAngle(vangle);					//主要用于最后控制减速度的大小
+	if (vangle < -90 || vangle > 90)//同时判断v的正负
+		v = -v;
+
+	if (face) {//forward	跑位，如果后退的话  就v=0
+		//设vl,vr=0 还是vl,vr=125 有一个条件有一个临界条件那就是 
+		//v = SPEED_ZERO
+		if (v < -SPEED_ZERO) {
+			Velocity(field, robot, 0, 0);
+			return;
+		}
+	}
+	else if (v > SPEED_ZERO) {//back	跑位，如果后退的话  就v=0
+		Velocity(field, robot, 0, 0);
+		return;
+	}
+
+	v1 = v;	//v1 is changing while program running 
+			//whlie, v is not
+
+	if (distance > Limiteddis) {//it is too early to count the steps
+		//but the Limiteddis should be tested!!	to do...
+		if (turnangle > Limitedangle || turnangle < -Limitedangle) {//adjust angle
+			/////////////////测试这一段
+			//对于goalie这一段应该特别注意
+			//发生变向	1.knock the robot,especially the opponent
+			//	2.knock the wall
+			// so the anglespeedmax is allowed ++ more!!
+			if (turnangle > 20 || turnangle < -20)
+				anglespeedmax = 0;
+			else if (turnangle > 10 || turnangle < -10)
+				anglespeedmax = 125;
+			else if (turnangle > 5 || turnangle < -5)
+				anglespeedmax = 180;
+			else
+				anglespeedmax = 200;
+			///////////////测试这一段
+			PAngle(field, robot, posangle, anglespeedmax);
+		}
+		else {
+			if (face)
+				Velocity(field, robot, f, f);
+			else
+				Velocity(field, robot, -f, -f);
+		}//it is time to rush
+	}
+	else {
+		if (distance > 1) {		//调整角度	return!!!!!!
+			//radious of robot is about 1.5 ,so the distance is very short
+			if (turnangle > Limitedangle || turnangle < -Limitedangle) {
+				Angle(field, robot, posangle);
+				return;
+			}
+		}
+
+		if (distance < 0.4) {	//停止并转向		return!!!!!!
+			//radious of robot is about 1.5 ,so the distance is very short
+			if (v<0.1 && v>-0.1) {	//the range of v shoud be tested 
+				if (bestangle == 0)
+					Velocity(field, robot, 0, 0);
 				else
-				{
-					if (deltaX > 0 && deltaY < 0) { angle_home_another = -angle_home_another; }
-					else
-					{
-						if (deltaX < 0 && deltaY < 0) { angle_home_another = -180 + angle_home_another; }
+					Angle(field, robot, bestangle);
+				return;
+			}
+		}
 
+		if (true) {
+			vmax = 125;
+			if (face) {
+				f = -vmax;		//减速度  为  0000000
+				v1 = VelocityOne(v1, -f, -f);		//加速一步
+				s = v1;
+				do {//whether to reduce
+					if (v1 > SPEED_ZERO)	//as i said,this is limited
+						v1 = VelocityOne(v1, 0, 0);
+					else
+						v1 = VelocityOne(v1, f, f);
+					s += v1;
+				} while (v1 > 0);
+
+				s -= v1;
+
+				if (s < distance) {//不满足减速条件加速
+					Velocity(field, robot, -f, -f);
+				}
+				else {
+					if (v > SPEED_ZERO)
+						Velocity(field, robot, 0, 0);
+					else {
+						v1 = VelocityOne(v, f, f);		//减速一步
+						if (v1 < 0)
+						{
+							do {//该降低功率了
+								f++;		//f=-vmax;
+								v1 = VelocityOne(v, f, f);
+							} while (v1 < distance && f < vmax);
+						}
+						Velocity(field, robot, f, f);
 					}
 				}
-
-				if (fabs(angle_home_another - field->selfRobots[id].rotation) < 20)
-				{
-
-					duiren = true;
-
-					break;
-				}
 			}
-
-		}
-
-		if (Distance(field->opponentRobots[i].position, field->selfRobots[id].position) < 6) {
-			double deltaY = field->opponentRobots[i].position.y - field->selfRobots[id].position.y;
-			double deltaX = field->opponentRobots[i].position.x - field->selfRobots[id].position.x;
-			double angle_home_another = Atan(fabs(deltaY), fabs(deltaX));
-			if (deltaX < 0 && deltaY>0) { angle_home_another = 180 - angle_home_another; }
 			else {
-				if (deltaX > 0 && deltaY < 0) { angle_home_another = -angle_home_another; }
-				else
-				{
-					if (deltaX < 0 && deltaY < 0) { angle_home_another = -180 + angle_home_another; }
+				f = vmax;		//减速度!!!!!
+				v1 = VelocityOne(v1, -f, -f);
+				s = v1;
+				do {//whether to reduce
+					if (v1 < -SPEED_ZERO)	//as i said,this is limited
+						v1 = VelocityOne(v1, 0, 0);
+					else
+						v1 = VelocityOne(v1, f, f);
+					s += v1;
+				} while (v1 < -0.1);
 
+				s -= v1;
+
+				if (s > -distance) {//不满足减速条件加速
+					Velocity(field, robot, -f, -f);
+				}
+				else {
+					if (v < -SPEED_ZERO)
+						Velocity(field, robot, 0, 0);
+					else {
+						v1 = VelocityOne(v, f, f);		//减速一步
+						if (v1 > 0) {
+							do {//该降低功率了
+								f--;		//f=-vmax;
+								v1 = VelocityOne(v, f, f);
+							} while (v1 > -distance && f > -vmax);
+						}
+						Velocity(field, robot, f, f);
+					}
 				}
 			}
-
-
-			if (fabs(angle_home_another - field->selfRobots[id].rotation) < 20)
-			{
-
-				duiren = true;
-
-				break;
-			}
-		};
-
+		}
 	}
-
-	if (duiren)
-		Velocity(&field->selfRobots[id], -120, 120);
-
 }
 
+void GoaliePosition(Field* field, int  robot, Vector3D pos, double bestangle, double limit) {	//考虑到可能的	急停和 急快速加速
+	//特别作了优化
+	//还有就是 被碰转后的转角过程 不能耽搁时间!!!
+	//转角是最危险的过程
 
-/*
-进攻框架：
-按照底角和中心分区，底角采取传球模式，中心进行射门姿势
-*/
-void Attack(Field* field)
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+
+	double anglespeedmax = 0;		//控制转交速度的变量
+	double vmax = 125;			//默认的跑位加速度
+	double Limitedangle = 2;		//默认减速范围
+
+	if (limit < 0.5)
+		limit = 0.5;
+	double Limiteddis = limit;	//减速范围有一个下限，保证不会来回跑动
+
+	double  distance;			//robot和目标点的距离
+	double turnangle, posangle, vangle;	//转动角度 ，目标点相对robot的角度，速度的绝对角度
+	double dx, dy;				//pos  和robot的坐标差
+	double a = SPEED_A;			//参数
+	double b = SPEED_B;
+	double v, v1;				//临时保存速度的大小!!!
+	double f = vmax;				//加速度变量
+	double s = 0;					//预测的减速位移(路程)
+	int n = 0;					//跑位的步数
+	bool face = true;			//判断小车是否是正面前进
+
+	v = sqrt(p->my_speed[robot].x * p->my_speed[robot].x + p->my_speed[robot].y * p->my_speed[robot].y);
+	//临时保存速度的大小!!!
+	dx = pos.x - p->robot[robot].position.x;		//pos  和robot的坐标差
+	dy = pos.y - p->robot[robot].position.y;
+
+	distance = Distance(p->robot[robot].position, pos);
+	posangle = Atan(dy, dx);
+
+	turnangle = p->robot[robot].rotation - posangle;		//转动角度 
+	RegulateAngle(turnangle);
+
+	if (turnangle > 90) {//判断小车是否是正面前进
+		face = false;
+		turnangle -= 180;
+	}
+	else if (turnangle < -90) {
+		face = false;
+		turnangle += 180;
+	}
+	else {
+		face = true;
+	}
+
+	vangle = p->my_speed[robot].z - p->robot[robot].rotation;		//速度的方向和robot正面的夹角
+	RegulateAngle(vangle);					//主要用于最后控制减速度的大小
+	if (vangle < -90 || vangle > 90)		//同时判断v的正负
+		v = -v;
+
+	if (face) {//forward	跑位，如果后退的话  就v=0
+		//设vl,vr=0 还是vl,vr=125 有一个条件有一个临界条件那就是 
+		//v = SPEED_ZERO
+		if (v < -SPEED_ZERO) {
+			Velocity(field, robot, 0, 0);
+			return;
+		}
+	}
+	else if (v > SPEED_ZERO) {//back		跑位，如果后退的话  就v=0
+		Velocity(field, robot, 0, 0);
+		return;
+	}
+
+	v1 = v;	//v1 is changing while program running 
+			//whlie, v is not
+
+	if (distance > Limiteddis) {//it is too early to count the steps
+		//but the Limiteddis should be tested!!	to do...
+		if (turnangle > Limitedangle || turnangle < -Limitedangle) {//adjust angle
+			/////////////////测试这一段
+			//对于goalie这一段应该特别注意
+			//发生变向	1.knock the robot,especially the opponent
+			//	2.knock the wall
+			// so the anglespeedmax is allowed ++ more!!
+			if (turnangle > 50 || turnangle < -50)
+				anglespeedmax = 0;
+			else if (turnangle > 30 || turnangle < -30)
+				anglespeedmax = 80;
+			else if (turnangle > 10 || turnangle < -10)
+				anglespeedmax = 125;
+			else if (turnangle > 5 || turnangle < -5)
+				anglespeedmax = 180;
+			else
+				anglespeedmax = 200;
+			///////////////测试这一段
+
+			PAngle(field, robot, posangle, anglespeedmax);
+		}
+		else {
+			if (face)
+				Velocity(field, robot, f, f);
+			else
+				Velocity(field, robot, -f, -f);
+		}//it is time to rush
+	}
+	else {
+		if (distance > 1) {		//调整角度	return!!!!!!
+			//radious of robot is about 1.5 ,so the distance is very short
+			if (turnangle > Limitedangle || turnangle < -Limitedangle) {
+				Angle(field, robot, posangle);
+				return;
+			}
+		}
+		if (distance < 0.4) {	//停止并转向		return!!!!!!
+			//radious of robot is about 1.5 ,so the distance is very short
+			if (v<0.1 && v>-0.1) {	//the range of v shoud be tested 
+				Angle(field, robot, bestangle);
+				return;
+			}
+		}
+		if (true) {
+			vmax = 125;
+			if (face) {
+				f = -vmax;		//减速度  为  0000000
+				v1 = VelocityOne(v1, -f, -f);		//加速一步
+				s = v1;
+				do {//whether to reduce
+					if (v1 > SPEED_ZERO)	//as i said,this is limited
+						v1 = VelocityOne(v1, 0, 0);
+					else
+						v1 = VelocityOne(v1, f, f);
+					s += v1;
+				} while (v1 > 0);
+
+				s -= v1;
+
+				if (s < distance) {//不满足减速条件加速
+					Velocity(field, robot, -f, -f);
+				}
+				else {
+					if (v > SPEED_ZERO)
+						Velocity(field, robot, 0, 0);
+					else {
+						v1 = VelocityOne(v, f, f);		//减速一步
+						if (v1 < 0) {
+							do {//该降低功率了
+								f++;		//f=-vmax;
+								v1 = VelocityOne(v, f, f);
+							} while (v1 < distance && f < vmax);
+						}
+						Velocity(field, robot, f, f);
+					}
+				}
+			}
+			else {
+				f = vmax;		//减速度!!!!!
+				v1 = VelocityOne(v1, -f, -f);
+				s = v1;
+				do {//whether to reduce
+					if (v1 < -SPEED_ZERO)	//as i said,this is limited
+						v1 = VelocityOne(v1, 0, 0);
+					else
+						v1 = VelocityOne(v1, f, f);
+					s += v1;
+				} while (v1 < -0.1);
+
+				s -= v1;
+
+				if (s > -distance) {//不满足减速条件加速
+					Velocity(field, robot, -f, -f);
+				}
+				else {
+					if (v < -SPEED_ZERO)
+						Velocity(field, robot, 0, 0);
+					else {
+						v1 = VelocityOne(v, f, f);		//减速一步
+						if (v1 > 0) {
+							do {//该降低功率了
+								f--;		//f=-vmax;
+								v1 = VelocityOne(v, f, f);
+							} while (v1 > -distance && f > -vmax);
+						}
+						Velocity(field, robot, f, f);
+					}
+				}
+			}
+		}
+	}
+}
+
+void PositionAndStopX(Field* field, int  robot, Vector3D pos, double Xangle, double limit) {
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+
+	double anglespeedmax = 0;		//控制转交速度的变量
+	double vmax = 125;
+	double Limitedangle = 2;
+
+	if (limit < 2)
+		limit = 2;
+	double Limiteddis = limit;
+
+	double  distance;
+	double turnangle, posangle, vangle;
+	double dx, dy;
+	double a = SPEED_A;
+	double b = SPEED_B;
+	double v, v1;
+	double f = vmax;
+	double s = 0;
+	int n = 0;
+	bool face = true;			//判断小车是否是正面前进
+
+	v = sqrt(p->my_speed[robot].x * p->my_speed[robot].x + p->my_speed[robot].y * p->my_speed[robot].y);
+
+	dx = pos.x - p->robot[robot].position.x;
+	dy = pos.y - p->robot[robot].position.y;
+
+	distance = Distance(p->robot[robot].position, pos);
+	posangle = Atan(dy, dx);
+
+	turnangle = p->robot[robot].rotation - posangle;		//think more!!
+	RegulateAngle(turnangle);
+
+	if (turnangle > 90) {
+		face = false;
+		turnangle -= 180;
+	}
+	else if (turnangle < -90) {
+		face = false;
+		turnangle += 180;
+	}
+	else {
+		face = true;
+	}
+
+	vangle = p->my_speed[robot].z - p->robot[robot].rotation;
+	RegulateAngle(vangle);
+	if (vangle < -90 || vangle > 90)
+		v = -v;
+	v1 = v;
+
+	if (distance > Limiteddis) {//it is too early to count the steps
+		if (turnangle > Limitedangle || turnangle < -Limitedangle) {//adjust angle
+			/////////////////测试这一段
+			if (turnangle > 20 || turnangle < -20)
+				anglespeedmax = 0;
+			else if (turnangle > 10 || turnangle < -10)
+				anglespeedmax = 125;
+			else if (turnangle > 5 || turnangle < -5)
+				anglespeedmax = 180;
+			else
+				anglespeedmax = 200;
+			///////////////测试这一段
+			PAngle(field, robot, posangle, anglespeedmax);
+		}
+		else {
+			if (face)
+				Velocity(field, robot, f, f);
+			else
+				Velocity(field, robot, -f, -f);
+		}//it is time to rush
+	}
+	else {
+		if (distance > 1) {		//调整角度	return!!!!!!
+			if (turnangle > Limitedangle || turnangle < -Limitedangle) {
+				Angle(field, robot, posangle);
+				return;
+			}
+		}
+		if (distance < 1) {	//停止并转向		return!!!!!!
+			if (v<0.5 && v>-0.5) {
+				Velocity(field, robot, -Xangle, Xangle);
+				return;
+			}
+		}
+		if (true) {
+			vmax = 125;
+			if (face) {
+				f = -vmax;		//减速度  为  0000000
+				v1 = VelocityOne(v1, -f, -f);		//加速一步
+				s = v1;
+				do {//whether to reduce
+					if (v1 > SPEED_ZERO)	//as i said,this is limited
+						v1 = VelocityOne(v1, 0, 0);
+					else
+						v1 = VelocityOne(v1, f, f);
+					s += v1;
+				} while (v1 > 0);
+
+				s -= v1;
+
+				if (s < distance) {//不满足减速条件加速
+					Velocity(field, robot, -f, -f);
+				}
+				else {
+					if (v > SPEED_ZERO)
+						Velocity(field, robot, 0, 0);
+					else {
+						v1 = VelocityOne(v, f, f);		//减速一步
+						if (v1 < 0) {
+							do {//该降低功率了
+								f++;		//f=-vmax;
+								v1 = VelocityOne(v, f, f);
+							} while (v1 < distance && f < vmax);
+						}
+						Velocity(field, robot, f, f);
+					}
+				}
+			}
+			else {
+				f = vmax;		//减速度!!!!!
+				v1 = VelocityOne(v1, -f, -f);
+				s = v1;
+				do {//whether to reduce
+					if (v1 < -SPEED_ZERO)	//as i said,this is limited
+						v1 = VelocityOne(v1, 0, 0);
+					else
+						v1 = VelocityOne(v1, f, f);
+					s += v1;
+				} while (v1 < -0.1);
+
+				s -= v1;
+
+				if (s > -distance) {//不满足减速条件加速
+					Velocity(field, robot, -f, -f);
+				}
+				else {
+					if (v < -SPEED_ZERO)
+						Velocity(field, robot, 0, 0);
+					else {
+						v1 = VelocityOne(v, f, f);		//减速一步
+						if (v1 > 0) {
+							do {//该降低功率了
+								f--;		//f=-vmax;
+								v1 = VelocityOne(v, f, f);
+							} while (v1 > -distance && f > -vmax);
+						}
+						Velocity(field, robot, f, f);
+					}
+				}
+			}
+		}
+	}
+}
+
+void PositionBallX(Field* field, int  robot, Vector3D pos, double Xangle, double limit) {
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+
+	double anglespeedmax = 0;		//控制转交速度的变量
+	double vmax = 125;
+	double Limitedangle = 2;
+
+	if (limit < 2.8)
+		limit = 2.8;
+	double Limiteddis = limit;
+
+	double  distance;
+	double turnangle, posangle, vangle;
+	double dx, dy;
+	double a = SPEED_A;
+	double b = SPEED_B;
+	double v;
+	double f = vmax;
+	bool face = true;			//判断小车是否是正面前进
+	bool turnornot = false;	//是否旋转,临时变量
+
+	v = sqrt(p->my_speed[robot].x * p->my_speed[robot].x + p->my_speed[robot].y * p->my_speed[robot].y);
+
+	dx = pos.x - p->robot[robot].position.x;
+	dy = pos.y - p->robot[robot].position.y;
+
+	distance = Distance(p->robot[robot].position, pos);
+	posangle = Atan(dy, dx);
+
+	turnangle = p->robot[robot].rotation - posangle;		//think more!!
+	RegulateAngle(turnangle);
+
+	if (turnangle > 90) {
+		face = false;
+		turnangle -= 180;
+	}
+	else if (turnangle < -90) {
+		face = false;
+		turnangle += 180;
+	}
+	else {
+		face = true;
+	}
+
+	vangle = p->my_speed[robot].z - p->robot[robot].rotation;
+	RegulateAngle(vangle);
+
+
+	if (distance < 3.2)
+		turnornot = true;
+	else if (distance < 3.5 && v > 0.5)
+		turnornot = true;
+	else if (distance < 4.5 && v > 0.8)
+		turnornot = true;
+
+	if (distance > Limiteddis)	//不在旋转范围内  则不转
+		turnornot = false;
+
+	if (turnornot) {//满足条件 转!!!
+		Velocity(field, robot, -Xangle, Xangle);
+	}//否则跑位
+	else if (turnangle > Limitedangle || turnangle < -Limitedangle) {//adjust angle
+		/////////////////测试这一段
+		if (turnangle > 60 || turnangle < -60)
+			anglespeedmax = 0;
+		else if (turnangle > 30 || turnangle < -30)
+			anglespeedmax = 100;
+		else if (turnangle > 10 || turnangle < -10)
+			anglespeedmax = 150;
+		else
+			anglespeedmax = 200;
+		///////////////测试这一段
+		PAngle(field, robot, posangle, anglespeedmax);
+
+	}
+	else {
+		if (face)
+			Velocity(field, robot, f, f);
+		else
+			Velocity(field, robot, -f, -f);
+	}//it is time to rush
+}
+
+void PositionAndThrough(Field* field, int robot, Vector3D pos, double MAX)
 {
-	//左上进攻
-	if (field->ball.position.x < -75 && field->ball.position.y>40)
-	{
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 
-	}
-	//左下进攻
-	else if (field->ball.position.x < -75 && field->ball.position.y < -40)
-	{
+	double anglespeedmax = 0;		//控制转交速度的变量
+	double max = MAX;
+	double Limitedangle = 2;
+	double Limiteddis = 0;
+	double  distance;
+	double turnangle, posangle, vangle;
+	double dx, dy;
+	double a = SPEED_A;
+	double b = SPEED_B;
+	double v, v1;
+	double f;
+	double s = 0;
+	int n = 0;
+	bool face = true;			//判断小车是否是正面前进
 
+	v = sqrt(p->my_speed[robot].x * p->my_speed[robot].x + p->my_speed[robot].y * p->my_speed[robot].y);
+
+	dx = pos.x - p->robot[robot].position.x;
+	dy = pos.y - p->robot[robot].position.y;
+
+	distance = Distance(p->robot[robot].position, pos);
+	posangle = Atan(dy, dx);
+
+	turnangle = posangle - p->robot[robot].rotation;		//think more!!
+	RegulateAngle(turnangle);
+
+	if (turnangle > 90) {
+		face = false;
+		turnangle -= 180;
 	}
-	//中路射门
+	else if (turnangle < -90) {
+		face = false;
+		turnangle += 180;
+	}
+	else {
+		face = true;
+	}
+
+	vangle = p->my_speed[robot].z - posangle;
+	RegulateAngle(vangle);
+	if (vangle < -90 || vangle > 90)
+		v = -v;
+	v1 = v;
+
+	if (distance > Limiteddis) {//it is too early to count the steps
+		if (turnangle > Limitedangle || turnangle < -Limitedangle) {//adjust angle
+			/////////////////测试这一段
+			if (turnangle > 20 || turnangle < -20)
+				anglespeedmax = 0;
+			else if (turnangle > 10 || turnangle < -10)
+				anglespeedmax = 125;
+			else if (turnangle > 5 || turnangle < -5)
+				anglespeedmax = 180;
+			else
+				anglespeedmax = 200;
+			///////////////测试这一段
+			PAngle(field, robot, posangle, anglespeedmax);
+		}
+		else {
+			f = max;
+			if (face)
+				Velocity(field, robot, f, f);
+			else
+				Velocity(field, robot, -f, -f);
+
+		}//it is time to rush
+	}
 	else
 	{
-		LineAttack(field);
-		//选出最适合
-		int WhoAttack;
-		double Min = 1000;
-		for (int i = 2; i < 5; i++)
+
+
+	}//abserlutely count
+}
+
+/************************踢球动作*********************************/
+//1.Kick 让robot把球踢到ToPos的位置
+//2.Kick 让robot 以与robot1的角度跑向它 
+//3.Kick 向着steps个周期后球的位置踢
+//4.shoot 射门
+/*****************************************************************/
+
+
+void Kick(Field* field, int  robot, Vector2 ToPos)
+{
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+
+	double LimitedCircle = 3;
+	Vector3D ball = Meetball_p(field, robot); //use the predictball position
+
+	Vector3D RobotToBall; //人和球的相对位置
+	RobotToBall.x = ball.x - p->robot[robot].position.x;
+	RobotToBall.y = ball.y - p->robot[robot].position.y;
+	RobotToBall.z = Atan(p->robot[robot].position, ball);
+
+	Vector3D BallToGate; //球和球门的相对位置
+	BallToGate.x = ToPos.x - ball.x;
+	BallToGate.y = ToPos.y - ball.y;
+	BallToGate.z = Atan(ball, ToPos);
+
+	double gateangle = BallToGate.z;
+
+	double RunAngle;
+	RunAngle = RobotToBall.z - BallToGate.z;
+	RegulateAngle(RunAngle);
+
+	double dis = Distance(ball, p->robot[robot].position);
+
+	if (dis > 3 * LimitedCircle) {
+		Vector3D Center;
+		if (RunAngle > 0) {
+			BallToGate.z -= 90;
+		}
+		else {
+			BallToGate.z += 90;
+		}
+
+		RegulateAngle(BallToGate.z);
+		Center.x = ball.x + LimitedCircle * cos(BallToGate.z / 180.0);
+		Center.y = ball.y + LimitedCircle * sin(BallToGate.z / 180.0);
+		Center.z = 0;
+		double distance = Distance(Center, p->robot[robot].position);
+
+		if (distance < 2 * LimitedCircle)
 		{
-			double K = (PBP[1] - field->selfRobots[i].position.y) / (PBP[0] - field->selfRobots[i].position.x);
-			if (min(abs(K - KBTO), abs(K - KTOP)) < Min)
-			{
-				Min = min(abs(K - KBTO), abs(K - KTOP));
-				WhoAttack = i;
+			RunAngle = RobotToBall.z + RunAngle / 2; // 可以调整  2 
+		}
+		else {
+			double CenAngle = Atan(p->robot[robot].position, Center);
+			if (RunAngle < 0) {
+				RunAngle = CenAngle - 180 * LimitedCircle * asin(LimitedCircle / distance) / 3.142;
+				RegulateAngle(RunAngle);
+			}
+			else {
+				RunAngle = CenAngle + 180 * LimitedCircle * asin(LimitedCircle / distance) / 3.142;
+				RegulateAngle(RunAngle);
 			}
 		}
-		//进攻者调整角度进行进攻
-	}
-}
-void LineAttack(Field* field)
-{
-	PredictBall2(1, field);
-	KTOP = (PBP[1] - 20) / (PBP[0] + 110);
-	KBTO = (PBP[1] + 20) / (PBP[0] + 110);
-}
 
-//琦玲的
-
-
-int pos(Vector2 pos) {
-	if (pos.x < -60) {
-		if (pos.y > 50) return 1;
-		if (pos.y < -50) return 2;
-	}
-	return 3;
-}
-
-
-void Yattack(int robot1, int robot2, int robot3, Field* field) {//传入参数就是进攻的三个机器人ID
-	//球在对方半场
-	int l, m, r;//最近 中间 最远
-	double dis1 = Distance(field->selfRobots[robot1].position, field->ball.position);
-	double dis2 = Distance(field->selfRobots[robot2].position, field->ball.position);
-	double dis3 = Distance(field->selfRobots[robot3].position, field->ball.position);
-	if (dis1 < dis2) {
-		l = dis1 < dis3 ? robot1 : robot3;
-		r = dis2 > dis3 ? robot2 : robot3;
 	}
 	else {
-		l = dis2 < dis3 ? robot2 : robot3;
-		r = dis1 > dis3 ? robot1 : robot3;
-	}
-	m = robot1 + robot2 + robot3 - l - r;
 
-	//int L, M, R;//最近 中间 最远
-	// dis1 = dis(field->opponentRobots[2].position, field->ball.position);
-	// dis2 = dis(field->opponentRobots[3].position, field->ball.position);
-	// dis3 = dis(field->opponentRobots[4].position, field->ball.position);
-	//if (dis1 < dis2) {
-	//	L = dis1 < dis3 ? 2 : 4;
-	//	R = dis2 > dis3 ? 3 : 4;
-	//}
-	//else {
-	//	L = dis2 < dis3 ? 3 : 4;
-	//	R = dis1 > dis3 ? 2 : 4;
-	//}
-	//M = 2 + 3 + 4 - L - R;
-	//30-》0
-	if (field->ball.position.x > -30) {
-		switch (Ypos(field->ball.position))
+
+		RunAngle = RobotToBall.z + RunAngle / 2; // 可以调整  2 
+		RegulateAngle(RunAngle);
+	}
+	double paraA = gateangle - p->robot[robot].rotation;
+	if (paraA < 0) {
+		paraA = -paraA;
+	}
+	if (paraA > 90) {
+		paraA = 180 - paraA;
+	}
+	if (0.1 > paraA)
+	{
+		paraA = 0.1;
+	}
+	double paraB = 125 * dis / 3 * LimitedCircle * 10 / paraA;
+	if (paraB > 125) {
+		paraB = 125;
+	}
+	PAngle(field, robot, RunAngle, paraB);
+}
+void Kick(Field* field, int  robot, Vector3D ToPos)
+{
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+
+	double LimitedCircle = 3;
+	Vector3D ball = Meetball_p(field, robot); //use the predictball position
+
+	Vector3D RobotToBall; //人和球的相对位置
+	RobotToBall.x = ball.x - p->robot[robot].position.x;
+	RobotToBall.y = ball.y - p->robot[robot].position.y;
+	RobotToBall.z = Atan(p->robot[robot].position, ball);
+
+	Vector3D BallToGate; //球和球门的相对位置
+	BallToGate.x = ToPos.x - ball.x;
+	BallToGate.y = ToPos.y - ball.y;
+	BallToGate.z = Atan(ball, ToPos);
+
+	double gateangle = BallToGate.z;
+
+	double RunAngle;
+	RunAngle = RobotToBall.z - BallToGate.z;
+	RegulateAngle(RunAngle);
+
+	double dis = Distance(ball, p->robot[robot].position);
+
+	if (dis > 3 * LimitedCircle) {
+		Vector3D Center;
+		if (RunAngle > 0) {
+			BallToGate.z -= 90;
+		}
+		else {
+			BallToGate.z += 90;
+		}
+
+		RegulateAngle(BallToGate.z);
+		Center.x = ball.x + LimitedCircle * cos(BallToGate.z / 180.0);
+		Center.y = ball.y + LimitedCircle * sin(BallToGate.z / 180.0);
+		Center.z = 0;
+		double distance = Distance(Center, p->robot[robot].position);
+
+		if (distance < 2 * LimitedCircle)
 		{
-		case 1: {
-			//右上
-			go(&field->selfRobots[l], l, field->ball.position.x, field->ball.position.y);
-			go(&field->selfRobots[r], r, (double)field->ball.position.x - 10, (double)field->ball.position.y * 0.1);
-			go(&field->selfRobots[m], m, (double)field->selfRobots[l].position.x - 10, (double)field->selfRobots[l].position.y + 10);
-			break;
+			RunAngle = RobotToBall.z + RunAngle / 2; // 可以调整  2 
 		}
-		case 2: {
-			//右下
-			go(&field->selfRobots[l], l, field->ball.position.x, field->ball.position.y);
-			go(&field->selfRobots[r], r, (double)field->ball.position.x - 10, (double)-field->selfRobots[l].position.y * 0.1);
-			go(&field->selfRobots[m], m, (double)field->selfRobots[l].position.x - 10, (double)field->selfRobots[l].position.y - 10);
-			break;
-		}
-		case 3: {
-			//中间区域
-			/*
-				!!!!!!!
-				亚欣在后面找个地方插夹球
-				!!!!!!!
-			*/
-			if (YellowShoot(field))
-				;
-			else
-			{
-				if (dirShootLock[l] == 1 || Distance(field->selfRobots[l].position, field->ball.position) > 8.0 * 2.54) {
-					//最近球员都比较远
-					YdirShoot(field, l);
-
-					//m 
-					//r
-				}
-				else if (dirShootLock[m] == 1) {
-					//最近的控球 m冲
-					YdirShoot(field, m);
-
-					//l
-					//r
-				}
-				else if (dirShootLock[r] == 1) {
-					//最近的控球 m冲
-					YdirShoot(field, m);
-
-					//l
-					//r
-				}
-
-				//依次判断是否能直射
-				if (YcanKshoot(field, l)) {
-					//piao的老代码的 感觉不大好 亚欣改了predictBall看能不能好一点
-					PredictBall2(1 , field);
-					go(&(field->selfRobots[l]), l, PBP[0], PBP[1]);
-					//m
-					//r
-				}
-				else if (YcanKshoot(field, m)) {
-					PredictBall2(1 , field);
-					go(&(field->selfRobots[m]), m, PBP[0], PBP[1]);
-					//l 控球？
-					//r
-				}
-				else if (YcanKshoot(field, r)) {
-					PredictBall2(1, field);
-					go(&(field->selfRobots[r]), r, PBP[0], PBP[1]);
-
-					//l 控球？
-					//m 跟人？
-				}
-
-
-				else {
-					//两个追 一个在中间等？
-					go(&(field->selfRobots[l]), l, PBP[0], PBP[1]);
-					go(&(field->selfRobots[m]), m, PBP[0], PBP[1]);
-					go(&(field->selfRobots[r]), r, 60, 0);
-					//r wait
-				}
+		else {
+			double CenAngle = Atan(p->robot[robot].position, Center);
+			if (RunAngle < 0) {
+				RunAngle = CenAngle - 180 * LimitedCircle * asin(LimitedCircle / distance) / 3.142;
+				RegulateAngle(RunAngle);
 			}
-			
+			else {
+				RunAngle = CenAngle + 180 * LimitedCircle * asin(LimitedCircle / distance) / 3.142;
+				RegulateAngle(RunAngle);
+			}
 		}
-		default:
-			break;
-		}
+
 	}
 	else {
-		//转防守？
-		//go(&field->selfRobots[0], 0, field->ball.position.x, field->ball.position.y);
-		//Velocity(&field->selfRobots[0], -100, 100);//!!!!测试 记得删掉
-	}
 
+
+		RunAngle = RobotToBall.z + RunAngle / 2; // 可以调整  2 
+		RegulateAngle(RunAngle);
+	}
+	double paraA = gateangle - p->robot[robot].rotation;
+	if (paraA < 0) {
+		paraA = -paraA;
+	}
+	if (paraA > 90) {
+		paraA = 180 - paraA;
+	}
+	if (0.1 > paraA)
+	{
+		paraA = 0.1;
+	}
+	double paraB = 125 * dis / 3 * LimitedCircle * 10 / paraA;
+	if (paraB > 125) {
+		paraB = 125;
+	}
+	PAngle(field, robot, RunAngle, paraB);
 }
 
+void Kick(Field* field, int  robot, int robot1) {//踢人
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+	Vector3D RobotToBall;		//人和球的相对位置
+	RobotToBall.x = p->robot[robot1].position.x - p->robot[robot].position.x;
+	RobotToBall.y = p->robot[robot1].position.y - p->robot[robot].position.y;
+	RobotToBall.z = Atan(p->robot[robot].position, p->robot[robot1].position);
 
-int Ypos(Vector2 pos) {
-	if (pos.x > 60) {
-		if (pos.y > 50) return 1;
-		if (pos.y < -50) return 2;
-	}
-	return 3;
+	Vector3D BallToGate;		//球和球门的相对位置
+	BallToGate.x = CONSTGATE.x - p->robot[robot1].position.x;
+	BallToGate.y = CONSTGATE.y - p->robot[robot1].position.y;
+	BallToGate.z = Atan(p->robot[robot1].position, CONSTGATE);
+
+	double RunAngle;
+	RunAngle = RobotToBall.z - BallToGate.z;
+	RegulateAngle(RunAngle);
+
+	RunAngle = RobotToBall.z + RunAngle / 2;	// 可以调整  2 
+	RegulateAngle(RunAngle);
+
+	PAngle(field, robot, RunAngle, 125);
 }
 
+void Kick(Field* field, int robot, int steps, double limits) {
+	//Mydata* p = (Mydata*)field->userData;
+	double dx, dy, angle;
 
-bool YcanKshoot(Field* field, int id)
-{
+	dx = p->ball_cur.x - p->robot[robot].position.x;
+	dy = p->ball_cur.y - p->robot[robot].position.y;
+	angle = Atan(dy, dx);
+	PredictBall(field, steps);
 
-	if (field->selfRobots[id].position.x > field->ball.position.x) {
-		double k = (field->selfRobots[id].position.y - field->ball.position.y) / (field->selfRobots[id].position.x - field->ball.position.x);
-		double bx = field->ball.position.x;
-		double by = field->ball.position.y;
-		double y = F(k, bx, by, FRIGHTX);
-		if (y < GTOPY - 2.5 && y > GBOTY + 2.5) {
-			return true;
-		}
+	if (angle<90 && angle>-90) {
+		if (p->ball_cur.y > 41.8)
+			PositionBallX(field, robot, p->ball_pre, -125, 3);
+		else
+			PositionBallX(field, robot, p->ball_pre, 125, 3);
+	}
+	else
+		shoot(field, robot);
+}
+
+void shoot(Field* field, int robot) {
+	//Mydata* p = (Mydata*)field->userData;
+	double w1, w2, alfa;
+	double dx, dy;
+	/*改过*/
+	if (p->ball_cur.y > GBOT && p->ball_cur.y <= (GTOP + GBOT) / 2) {
+		if (p->ball_speed.z > 85 && p->ball_speed.z < 95)
+			PositionBallX(field, robot, p->ball_cur, -90, 4);
+		else if (p->ball_speed.z<-85 && p->ball_speed.z>-95)
+			PositionBallX(field, robot, p->ball_cur, 90, 4);
+	}
+	else if (p->ball_cur.y >= (GTOP + GBOT) / 2 && p->ball_cur.y <= GTOP) {
+		if (p->ball_speed.z > 85 && p->ball_speed.z < 95)
+			PositionBallX(field, robot, p->ball_cur, -90, 4);
+		else if (p->ball_speed.z<-85 && p->ball_speed.z>-95)
+			PositionBallX(field, robot, p->ball_cur, 90, 4);
+	}
+
+	if (p->robot[robot].position.x <= p->ball_cur.x) {
+		PredictBall(field, 2);
+		dx = GRIGHT - p->robot[robot].position.x;
+		dy = GTOP - p->robot[robot].position.y;
+		w1 = Atan(dy, dx);
+
+		dx = GRIGHT - p->robot[robot].position.x;
+		dy = GBOT - p->robot[robot].position.y;
+		w2 = Atan(dy, dx);
+
+		dx = p->ball_pre.x - p->robot[robot].position.x;
+		dy = p->ball_pre.y - p->robot[robot].position.y;
+		alfa = Atan(dy, dx);
+
+		if ((w1 - alfa) * (w2 - alfa) <= 0)
+			PAngle(field, robot, alfa, 125);
+		else if (p->ball_cur.y < GBOT + 4 && p->robot[robot].position.y < GBOT + 4)
+			Kick(field, robot, BOTGATE);
+		else if (p->ball_cur.y > GTOP - 4 && p->robot[robot].position.y > GBOT - 4)
+			Kick(field, robot, TOPGATE);
+		else
+			Kick(field, robot, CONSTGATE);
+	}
+	else
+		Kick(field, robot, CONSTGATE);
+}
+
+/************************防止犯规*********************************/
+//1.判断robot队员和球的距离是否再LENGTH规定的范围内返回true  or false
+/*****************************************************************/
+
+bool Within(Field* field, int robot, double LENGTH) {
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+
+	const double steps = 50;
+	int who = robot;
+	double dis;
+
+	Vector3D ballgo = { 0,0,0 };
+	Vector3D robotgo = { 0,0,0 };
+	Vector3D ball = p->ball_cur;
+
+	ballgo.x = ball.x + steps * p->my_speed[who].x;
+	ballgo.y = ball.y + steps * p->my_speed[who].y;
+
+	dis = Distance(ballgo, p->robot[robot].position);
+
+	if (dis < LENGTH) {
+		return true;
 	}
 	return false;
 }
-void YdirShoot(Field* field, int id) {
-	double Bdist = Distance(field->selfRobots[id].position, field->ball.position);
-	//还锁
-	if (field->selfRobots[id].position.x > field->ball.position.x) {
-		//最好加上速度判断
-		dirShootLock[id] = 0;
-		double dy = field->selfRobots[id].position.y > field->ball.position.y ? 3.0 * 2.54 : -3.0 * 2.54;
-		;
-		if (dy + field->ball.position.y > FTOP - 1.0 * 2.54) {
-			dy *= -1;
+
+
+//////////////////////比赛状态/////////////////////
+void NormalGame(Field* field) {
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+	PredictBall(field, 2);
+	if (p->ball_speed.x < 0.5 && p->ball_speed.y < 0, 5) Kick(field, 3, p->ball_pre);
+	Vector3D pos, begin, end;
+	static int flag = 1;
+	int i, count, x;
+	double alfa;
+
+	if (flag == 1) {
+		PredictBall(field, 2);
+		Kick(field, 3, p->ball_pre);
+		Kick(field, 4, p->ball_pre);
+		flag++;
+	}
+	Keeper(field, 0);
+
+	if (p->ball_cur.x >= (50-6.8)*2.54 && p->ball_cur.x < (61 - 6.8)*2.54)
+		Kick(field, 1, CONSTGATE);
+	else if (p->ball_cur.x >= (61-6.8)*2.54 && p->ball_cur.x < (78.6-2.54)*2.54) {
+		if (p->ball_cur.y < (27.8-6.373)*2.54) {
+			pos.x = (37.2-6.8)*2.54;
+			pos.y = (20-6.373)*2.54;
 		}
-		if (dy + field->ball.position.y < FBOT + 1.0 * 2.54) {
-			dy *= -1;
+		else if (p->ball_cur.y <= (58.5-6.373)*2.54) {
+			PredictBall(field, 2);
+			pos.x = (37.2-6.8)*2.54;
+			pos.y = p->ball_pre.y;
 		}
-		go(&(field->selfRobots[id]), id, field->ball.position.x - 3.0 * 2.54, field->ball.position.y + dy);
-		return;
-	}
-	if (Bdist > 15.0 * 2.54) {
-		//注意dist的值不能小于自己设的那个延长距离
-		dirShootLock[id] = 0;
-	}
-
-	//射门
-	if (dirShootLock[id]) {
-		//go(&(field->selfRobots[id]), id, dirShootPos[id].x, dirShootPos[id].y);
-		double x = (dirShootPos[id].x - field->ball.position.x) * 0.3 + field->ball.position.x;
-		double y = (dirShootPos[id].y - field->ball.position.y) * 0.3 + field->ball.position.y;
-		//Position(&(field->selfRobots[id]), x, y);
-		go(&(field->selfRobots[id]), id, x, y);
-		//还锁
-
-		return;
-	}
-
-	dirShootLock[id] = 0;
-
-	//简单判断
-	double tx = field->ball.position.x - 10.0 * 2.54, ty;
-
-	if (field->ball.position.y < GBOTY + 5.0) {
-		ty = F((GTOPY - field->ball.position.y) / (GRIGHT - field->ball.position.x),
-			field->ball.position.x, field->ball.position.y, tx);
-		dirShootPos[id] = { GRIGHT * 1.0, GBOTY * 0.3 + GTOPY * 0.7 };
-	}
-	else if (field->ball.position.y > GTOPY - 5.0) {
-		ty = F((GBOTY - field->ball.position.y) / (GRIGHT - field->ball.position.x),
-			field->ball.position.x, field->ball.position.y, tx);
-		dirShootPos[id] = { GRIGHT * 1.0, GBOTY * 0.7 + GTOPY * 0.3 };
-	}
-	else {
-		//需要细化
-		ty = F((GBOTY - field->ball.position.y) / (GRIGHT - field->ball.position.x),
-			field->ball.position.x, field->ball.position.y, tx);
-		dirShootPos[id] = { GRIGHT * 1.0, GBOTY * 0.7 + GTOPY * 0.3 };
-
-		/*ty = F((GBOTY - field->ball.position.y) / (GRIGHT - field->ball.position.x),
-			field->ball.position.x, field->ball.position.y, tx);
-		dirShootPos[id] = { GRIGHT * 1.0, GBOTY * 0.7 + GTOPY * 0.3 };*/
-	}
-
-
-	//if (env->opponent[0].pos.y > MID) {
-	//	//守门员在上面
-	//	ty = F((env->goalBounds.bottom - field->ball.position.y) / (env->goalBounds.left - field->ball.position.x),
-	//		field->ball.position.x, field->ball.position.y, tx);
-	//}
-	//else {
-	//	//守门员在下面
-	//	ty = F((env->goalBounds.top - field->ball.position.y) / (env->goalBounds.left - field->ball.position.x),
-	//		field->ball.position.x, field->ball.position.y, tx);
-	//}
-
-	//防止溢出 !!!!!!!!!!!!参数应该要改？
-	if (ty > FTOP - 10.0 * 2.54 || ty < FBOT + 10.0 * 2.54 || tx < FLEFTX + 10.0 || tx > FRIGHTX - 10.0) {
-		PositionPro(&(field->selfRobots[id]), id, field->ball.position.x, field->ball.position.y);
-		return;
-	}
-
-	//do shooting
-
-	double dist = Distance(tx, field->selfRobots[id].position.x, ty, field->selfRobots[id].position.y);
-	if (dist < 1.5 * 2.54) {
-		dirShootLock[id] = 1;
-		//Velocity(&(field->selfRobots[id]), 0, 0);
-		//RotateTo(&(field->selfRobots[id]), id, dirShootPos[id].x, dirShootPos[id].y);
-		//Position(&(field->selfRobots[id]), dirShootPos[id].x, dirShootPos[id].y);
-		double x = (dirShootPos[id].x - field->ball.position.x) * 0.3 + field->ball.position.x;
-		double y = (dirShootPos[id].y - field->ball.position.y) * 0.3 + field->ball.position.y;
-		go(&(field->selfRobots[id]), id, x, y);
-	}
-	else if (dist < 8.0 * 2.54) {
-		Velocity(&(field->selfRobots[id]), 10, 10);
-	}
-	else {
-		PositionPro(&(field->selfRobots[id]), id, tx, ty);
-	}
-
-}
-bool YellowShoot(Field* field)
-{
-	//夹球射门
-	double x1 = field->selfRobots[3].position.x;
-	double y1 = field->selfRobots[3].position.y;
-	double x2 = field->selfRobots[4].position.x;
-	double y2 = field->selfRobots[4].position.y;
-	double k = (x1 - x2) / (y1 - y2);
-	PredictBall2(1, field);
-	double xc = PBP[0];
-	double yc = PBP[1];
-	double s1 = atan2(yc - y1, xc - x1);
-	double s2 = atan2(yc - y2, xc - x2);
-	if (x1 > xc || x2 > xc)
-		return FALSE;
-	if (s1 + s2 < 20 / 180*PI)
-		return FALSE;
-	double b = yc - k * xc;
-	double ShootY = k * FRIGHTX + b;
-	if (ShootY > GTOPY || ShootY < GBOTY)
-		return FALSE;
-	double d1 = Distance(x1, y1, xc, yc);
-	double d2 = Distance(x2, y2, xc, yc);
-	double v1, v2;
-	if (d1 > d2)
-	{
-		v1 = 125;
-		v2 = v1 * d2 / d1;
-	}
-	else
-	{
-		v2 = 125;
-		v1 = v2 * d1 / d2;
-	}
-
-	if (ShootY <= GTOPY && ShootY >= GBOTY)
-	{
-		RotateTo(&(field->selfRobots[3]), 3, xc, yc);
-		RotateTo(&(field->selfRobots[4]), 4, xc, yc);
-		if (NEEDROTATE[3] != 1 && NEEDROTATE[4] != 1)
-		{
-			Velocity(&(field->selfRobots[3]), v1, v1);
-			Velocity(&(field->selfRobots[4]), v2, v2);
+		else {
+			pos.x = (37.2-6.8)*2.54;
+			pos.y = (66.2-6.37)*2.54;
 		}
-			
+		PositionAndStop(field, 1, pos);
 	}
-	return TRUE;
-}
-
-
-//defand
-void activeDefender(Field* field, Robot* robot, int riD)
-{
-	PredictBall2(1, field);
-	//绕到球的右边kick ball
-	double bx, by;//ball 的坐标
-	double rx, ry;//机器人坐标
-	double xl, yl;//
-	double dx;//rx-bx
-	double desx, desy;//
-	xl = 20;
-	//yl = 15.24;
-	yl = 5;
-	bx = field->ball.position.x;
-	by = field->ball.position.y;
-	rx = robot->position.x;
-	ry = robot->position.y;
-	dx = rx - bx;
-	//double length = distance()
-	if (dx > 2.54)
-	{
-		if (ry < by)
-		{
-
-			desy = by - yl;
-			if (desy < -90)
-				desy = -90;
-
-		}
-		if (ry >= by)
-		{
-			desy = by + yl;
-			if (desy > 90)
-				desy = 90;
-
-		}
-		desx = bx - xl;
-		if (desx > 110)
-		{
-			desx = 110;
-		}
-		go(robot, riD, desx, desy);
-
-	}
-	else
-		go(robot, riD, bx - 4, by);
-	//if (bx > 88.28 && by<33.93 && ry>by)
-		//go(robot, riD, bx, by + 1);
-	//if (bx > 88.28 && by > 49.68 && ry < by)
-		//go(robot, riD, bx, by - 1);
-}
-void NegDefend(Field* field, int id)
-{
-	double bx = field->ball.position.x;
-	double by = field->ball.position.y;
-	double rx = field->selfRobots[id].position.x;
-	double ry = field->selfRobots[id].position.y;
-	if (bx <= 0)
-	{
-		if (bx >= rx)
-		{
-			Position(&field->selfRobots[id], -68, by);
-		}
-		else
-		{
-			if (by <= 0)
-				Position(&field->selfRobots[id], rx, by + 10);
-			else
-				Position(&field->selfRobots[id], rx, by - 10);
+	else  if (p->ball_cur.x > 78.6 && ((p->ball_cur.y < 34 && p->ball_cur.y>6.3) || (p->ball_cur.y > 48 && p->ball_cur.y < 77.2))) {
+		Order(field);
+		count = 120;
+		while (count > 0) {
+			Kick(field, 1, p->Attacker);
+			count--;
 		}
 	}
-}
-void MidDefend(Field* field, int id1, int id2)
-{
-	PredictBall2(2, field);
-	double bx = field->ball.position.x;
-	double by = field->ball.position.y;
-	if (bx < 0)
-	{
-		if (bx >= 0 && bx <= 30)
-		{
-			go(&field->selfRobots[id1], id1, bx, by);
-			go(&field->selfRobots[id2], id2, bx, by);
-			return;
+	switch (p->WIB) {
+	case 1:
+		Order(field);
+		//ActiveAttacker,Attacker
+		pos.x = 50;
+		pos.y = 9;
+		Kick(field, p->ActiveAttacker, pos);
+		Kick(field, p->Attacker, pos);
+		//Defender
+		pos.x = 19;
+		pos.y = 58;
+		for (i = 1; i < 5; i++) {
+			if (fabs(p->opp[i].position.x - pos.x) < 15 && fabs(p->opp[i].position.y - pos.y) < 15)
+				break;
 		}
-		if (by >= 40)
-			Position(&field->selfRobots[id1], -2.5, by - 8);
-		else
-			Position(&field->selfRobots[id1], -2.5, 70);
-		if (by <= -40)
-			Position(&field->selfRobots[id2], -2.5, by + 8);
-		else
-			Position(&field->selfRobots[id2], -2.5, -70);
-	}
-}
-void Defend(Field* field, int rID)
-{
-	if (field->ball.position.x >= 0)
-	{
-		go(&field->selfRobots[rID], rID, -6, field->ball.position.y);
-	}
-	else
-	{
-		double by = field->ball.position.y;
-		double bx = field->ball.position.x;
-		double rx = field->selfRobots[rID].position.x;
-		double ry = field->selfRobots[rID].position.y;
-		if (bx <= -75 && bx >= -93 && by >= -40 && by <= 40 && rx >= bx)
-		{
-			go(&field->selfRobots[rID], rID, -72, ry);
-			return;
+		if (i < 5)
+			PositionAndThrough(field, p->Defender, p->opp[i].position, 125);
+		else {
+			pos.x = 20;
+			pos.y = 58;
+			PositionAndStop(field, p->Defender, pos, -145);
 		}
-		if (bx <= -75 && bx >= -93 && by >= -40 && by <= 40 && rx <= bx)
-		{
-			go(&field->selfRobots[rID], rID, bx + 4, by);
-			return;
+		//NegativeAttacker
+		pos.x = 19;
+		pos.y = 27;
+		for (i = 1; i < 5; i++) {
+			if (fabs(p->opp[i].position.x - pos.x) < 15 && fabs(p->opp[i].position.y - pos.y) < 15)
+				break;
 		}
-		if (field->ball.position.x >= -93)
-		{
-			activeDefender(field, &field->selfRobots[rID], rID);
+		if (i < 5)
+			PositionAndThrough(field, p->NegativeAttacker, p->opp[i].position, 125);
+		else {
+			pos.x = 20;
+			pos.y = 27;
+			PositionAndStop(field, p->NegativeAttacker, pos, -145);
 		}
-		else
-		{
-			if (by >= 42)
-			{
-				if (ry >= 42)
-					activeDefender(field, &field->selfRobots[rID], rID);
-				else
-					go(&field->selfRobots[rID], rID, rx, 42);
+		break;
+	case 2:
+		Order(field);
+		//Defender
+		pos.x = 19;
+		pos.y = 58;
+		for (i = 1; i < 5; i++) {
+			if (fabs(p->opp[i].position.x - pos.x) < 15 && fabs(p->opp[i].position.y - pos.y) < 15)
+				break;
+		}
+		if (i < 5)
+			PositionAndThrough(field, p->Defender, p->opp[i].position, 125);
+		else {
+			pos.x = 20;
+			pos.y = 58;
+			PositionAndStop(field, p->Defender, pos, -145);
+		}
 
+		//小禁区加上下两小块
+		if (p->ball_cur.x < SRG_LEFT + 0.8 && p->ball_cur.y<BRG_TOP + 0.8 && p->ball_cur.y>BRG_BOT - 0.8) {
+			//ActiveAttacker
+			pos.x = 8.9;
+			pos.y = 58;
+			for (i = 1; i < 5; i++) {
+				if (fabs(p->opp[i].position.x - pos.x) < 2 && fabs(p->opp[i].position.y - pos.y) < 8) break;
 			}
-			else if (by <= -42)
-			{
-				if (ry <= -42)
-					activeDefender(field, &field->selfRobots[rID], rID);
-				else
-					go(&field->selfRobots[rID], rID, rx, 42);
+			if (i < 5)
+				PositionAndThrough(field, p->ActiveAttacker, p->opp[i].position, 125);
+			else {
+				pos.x = BRG_LEFT;
+				pos.y = SRG_TOP;
+				PositionAndStop(field, p->ActiveAttacker, pos, -145);
 			}
-			else
-			{
-				go(&field->selfRobots[rID], rID, -67.5, by + 5);
+			//Attacker
+			pos.x = 8.9;
+			pos.y = 27;
+			for (i = 1; i < 5; i++) {
+				if (fabs(p->opp[i].position.x - pos.x) < 2 && fabs(p->opp[i].position.y - pos.y) < 8) break;
+			}
+			if (i < 5)
+				PositionAndThrough(field, p->Attacker, p->opp[i].position, 125);
+			else {
+				pos.x = BRG_LEFT;
+				pos.y = BD_BOT;
+				PositionAndStop(field, p->Attacker, pos, 145);
+			}
+			//NegativeAttacker
+			pos.x = 19;
+			pos.y = 27;
+			for (i = 1; i < 5; i++) {
+				if (fabs(p->opp[i].position.x - pos.x) < 15 && fabs(p->opp[i].position.y - pos.y) < 15)
+					break;
+			}
+			if (i < 5)
+				PositionAndThrough(field, p->NegativeAttacker, p->opp[i].position, 125);
+			else {
+				pos.x = 20;
+				pos.y = 27;
+				PositionAndStop(field, p->NegativeAttacker, pos, 145);
 			}
 		}
+		//其他
+		else {
+			//ActiveAttacker,Attacker
+			pos.x = 50;
+			pos.y = 9;
+			Kick(field, p->ActiveAttacker, pos);
+			Kick(field, p->Attacker, pos);
+
+			//NegativeAttacker
+			pos.x = SRG_LEFT;
+			pos.y = p->ball_cur.y;
+			PositionAndStop(field, p->NegativeAttacker, pos);
+		}
+		break;
+
+	case 3:
+		Order(field);
+		//Defender
+		pos.x = 19;
+		pos.y = 27;
+		for (i = 1; i < 5; i++) {
+			if (fabs(p->opp[i].position.x - pos.x) < 15 && fabs(p->opp[i].position.y - pos.y) < 15)
+				break;
+		}
+		if (i < 5)	PositionAndThrough(field, p->Defender, p->opp[i].position, 125);
+		else {
+			pos.x = 20;
+			pos.y = 27;
+			PositionAndStop(field, p->Defender, pos, 145);
+		}
+		//小禁区
+		if (p->ball_cur.x < SRG_LEFT + 0.8 && p->ball_cur.y<BRG_TOP + 0.8 && p->ball_cur.y>BRG_BOT - 0.8) {
+			//ActiveAttacker
+			pos.x = 8.9;
+			pos.y = 27;
+			for (i = 1; i < 5; i++) {
+				if (fabs(p->opp[i].position.x - pos.x) < 2 && fabs(p->opp[i].position.y - pos.y) < 8) break;
+			}
+			if (i < 5)
+				PositionAndThrough(field, p->ActiveAttacker, p->opp[i].position, 125);
+			else {
+				pos.x = BRG_LEFT;
+				pos.y = BD_BOT;
+				PositionAndStop(field, p->ActiveAttacker, pos, 145);
+			}
+			//Attacker
+			pos.x = 8.9;
+			pos.y = 58;
+			for (i = 1; i < 5; i++) {
+				if (fabs(p->opp[i].position.x - pos.x) < 2 && fabs(p->opp[i].position.y - pos.y) < 8) break;
+			}
+			if (i < 5)
+				PositionAndThrough(field, p->Attacker, p->opp[i].position, 125);
+			else {
+				pos.x = BRG_LEFT;
+				pos.y = BD_TOP;
+				PositionAndStop(field, p->Attacker, pos, -145);
+			}
+			pos.x = 19;
+			pos.y = 58;
+			for (i = 1; i < 5; i++) {
+				if (fabs(p->opp[i].position.x - pos.x) < 15 && fabs(p->opp[i].position.y - pos.y) < 15)
+					break;
+			}
+			if (i < 5)
+				PositionAndThrough(field, p->NegativeAttacker, p->opp[i].position, 125);
+			else {
+				pos.x = 20;
+				pos.y = 27;
+				PositionAndStop(field, p->NegativeAttacker, pos, -145);
+			}
+
+		}
+		//其他
+		else {
+			//ActiveAttacker,Attacker
+			pos.x = 50;
+			pos.y = 74;
+			Kick(field, p->ActiveAttacker, pos);
+			Kick(field, p->Attacker, pos);
+			//NegativeAttacker
+			pos.x = SRG_LEFT;
+			pos.y = p->ball_cur.y;
+			PositionAndStop(field, p->NegativeAttacker, pos);
+
+			if (p->ball_cur.x < 12 && p->ball_cur.y < 59)
+				PositionAndThrough(field, p->NegativeAttacker, p->robot[0].position);
+			else if (p->ball_cur.x > GLEFT + 4 && p->ball_cur.x < 17) {
+				pos.x = 9;
+				pos.y = 77;
+				Kick(field, p->NegativeAttacker, pos);
+			}
+			else {
+				pos.x = 20;
+				pos.y = p->robot[0].position.y;
+				PositionAndStop(field, p->NegativeAttacker, pos);
+			}
+		}
+		break;
+	case 4:
+		Order(field);
+		//ActiveAttacker,Attacker
+		pos.x = 50;
+		pos.y = 74;
+		Kick(field, p->ActiveAttacker, pos);
+		Kick(field, p->Attacker, pos);
+		//Defender		
+		pos.x = 19;
+		pos.y = 27;
+		for (i = 1; i < 5; i++) {
+			if (fabs(p->opp[i].position.x - pos.x) < 15 && fabs(p->opp[i].position.y - pos.y) < 15)
+				break;
+		}
+		if (i < 5)
+			PositionAndThrough(field, p->Defender, p->opp[i].position, 125);
+		else {
+			pos.x = 20;
+			pos.y = 27;
+			PositionAndStop(field, p->Defender, pos, 145);
+		}
+		//NegativeAttacker
+		pos.x = 19;
+		pos.y = 58;
+		for (i = 1; i < 5; i++) {
+			if (fabs(p->opp[i].position.x - pos.x) < 15 && fabs(p->opp[i].position.y - pos.y) < 15)
+				break;
+		}
+		if (i < 5)
+			PositionAndThrough(field, p->NegativeAttacker, p->opp[i].position, 125);
+		else {
+			pos.x = 20;
+			pos.y = 27;
+			PositionAndStop(field, p->NegativeAttacker, pos, -145);
+		}
+		break;
+	case 5:
+	case 6:
+		Order(field);
+		/*改过7.18
+			x=WhoseBall(field);
+			if(p->whoseBall==2){
+				 Sweep(field,p->Attacker);
+				 for(i=0;i<5;i++) if(Distance(p->robot[p->Attacker].position,p->opp[i].position)<5) break;
+				 if(i<5) PositionAndThrough(field,p->ActiveAttacker,p->opp[i].position);
+				 else Kick(field,p->ActiveAttacker,p->Attacker);
+			}
+			else{
+				Kick(field,p->ActiveAttacker,1,1.5);
+				Kick(field,p->Attacker,3,1.5);
+			}
+		改过7.18*/
+		Kick(field, p->ActiveAttacker, 1, 1.5);
+		Kick(field, p->Attacker, 3, 1.5);
+		pos.x = 19;
+		pos.y = 58;
+		PositionAndStop(field, p->Defender, pos, -135);
+		/*改过2011.7.17*/
+	//NegativeAttacker
+		PredictBall(field, 10);
+		for (i = 1; i < 5; i++) {
+			if (fabs(p->opp[i].position.x - p->ball_pre.x) < 15 && fabs(p->opp[i].position.y - p->ball_pre.y) < 15)
+				break;
+		}
+		PositionAndThrough(field, p->NegativeAttacker, pos, 135);
+		break;
+	case 7:
+	case 8:
+		Order(field);
+		/*改过7.18
+			x=WhoseBall(field);
+			if(p->whoseBall==2){
+				 Sweep(field,p->Attacker);
+				 for(i=0;i<5;i++) if(Distance(p->robot[p->Attacker].position,p->opp[i].position)<5) break;
+				 if(i<5) PositionAndThrough(field,p->ActiveAttacker,p->opp[i].position);
+				 else Kick(field,p->ActiveAttacker,p->Attacker);
+			}
+			else{
+				Kick(field,p->ActiveAttacker,1,1.5);
+				Kick(field,p->Attacker,3,1.5);
+			}
+		改过7.18*/
+		Kick(field, p->ActiveAttacker, 1, 1.5);
+		Kick(field, p->Attacker, 3, 1.5);
+		pos.x = 20;
+		pos.y = 27;
+		PositionAndStop(field, p->Defender, pos, 135);
+		/*改过2011.7.17*/
+	//NegativeAttacker
+		PredictBall(field, 10);
+		for (i = 1; i < 5; i++) {
+			if (fabs(p->opp[i].position.x - p->ball_pre.x) < 15 && fabs(p->opp[i].position.y - p->ball_pre.y) < 15)
+				break;
+		}
+		PositionAndThrough(field, p->Defender, pos, 135);
+		break;
+	case 9:
+		Order(field);
+		//ActiveAttacker
+		shoot(field, p->ActiveAttacker);
+		//Attacker
+		if (p->ball_cur.x > p->robot[p->ActiveAttacker].position.x && p->ball_cur.y < 10) {
+			count = 120;
+			while (count > 0) {
+				Kick(field, p->Attacker, p->ActiveAttacker);
+				count--;
+			}
+		}
+		else {
+			PredictBall(field, 2);
+			PositionAndStop(field, p->Attacker, p->ball_pre);
+			pos.x = 77;
+			pos.y = 57.5;
+			PositionAndStop(field, p->NegativeAttacker, pos, -45);
+		}
+		/*改过*/
+		for (i = 1; i < 5; i++) {
+			if (i != p->ActiveAttacker && i != p->Attacker && i != p->NegativeAttacker) break;
+		}
+		PredictBall(field, 4);
+		pos.x = 50;
+		pos.y = p->ball_pre.y;
+		PositionAndStop(field, i, pos);
+		break;
+	case 10:
+		Order(field);
+		shoot(field, p->ActiveAttacker);
+		PredictBall(field, 2);
+		PositionAndStop(field, p->Attacker, p->ball_pre);
+		pos.x = 77;
+		pos.y = 57.5;
+		PositionAndStop(field, p->NegativeAttacker, pos, -45);
+		/*改过*/
+		for (i = 1; i < 5; i++) {
+			if (i != p->ActiveAttacker && i != p->Attacker && i != p->NegativeAttacker) break;
+		}
+		PredictBall(field, 4);
+		pos.x = 50;
+		pos.y = p->ball_pre.y;
+		PositionAndStop(field, i, pos);
+		break;
+	case 11:
+		Order(field);
+		shoot(field, p->ActiveAttacker);
+		PredictBall(field, 2);
+		PositionAndStop(field, p->Attacker, p->ball_pre);
+		pos.x = 77;
+		pos.y = 26;
+		PositionAndStop(field, p->NegativeAttacker, pos, -45);
+		/*改过*/
+		for (i = 1; i < 5; i++) {
+			if (i != p->ActiveAttacker && i != p->Attacker && i != p->NegativeAttacker) break;
+		}
+		PredictBall(field, 4);
+		pos.x = 50;
+		pos.y = p->ball_pre.y;
+		PositionAndStop(field, i, pos);
+		break;
+	case 12:
+		Order(field);
+		shoot(field, p->ActiveAttacker);
+		if (p->ball_cur.x > p->robot[p->ActiveAttacker].position.x && p->ball_cur.y > 74.2) {
+			count = 120;
+			while (count > 0) {
+				Kick(field, p->Attacker, p->ActiveAttacker);
+				count--;
+			}
+		}
+		else {
+			PredictBall(field, 2);
+			PositionAndStop(field, p->Attacker, p->ball_pre);
+			pos.x = 77;
+			pos.y = 26;
+			PositionAndStop(field, p->NegativeAttacker, pos, -45);
+		}
+		/*改过*/
+		for (i = 1; i < 5; i++) {
+			if (i != p->ActiveAttacker && i != p->Attacker && i != p->NegativeAttacker) break;
+		}
+		PredictBall(field, 4);
+		pos.x = 50;
+		pos.y = p->ball_pre.y;
+		PositionAndStop(field, i, pos);
+		break;
+	case 13:
+		Order(field);
+		//ActiveAttacke
+		shoot(field, p->ActiveAttacker);
+		//Attacker
+		if (p->ball_cur.x < 92) {
+			count = 120;
+			while (count > 0) {
+				Kick(field, p->Attacker, p->ActiveAttacker);
+				count--;
+			}
+		}
+		else
+			shoot(field, p->Attacker);
+		//NegativeAttacker
+		if (p->ball_cur.x < 87 || p->ball_cur.y < 20) {
+			count = 120;
+			while (count > 0) {
+				Kick(field, p->NegativeAttacker, p->Attacker);
+				count--;
+			}
+		}
+		else {
+			pos.x = 77;
+			pos.y = 57.5;
+			PositionAndStop(field, p->NegativeAttacker, pos, -45);
+		}
+		/*改过*/
+		for (i = 1; i < 5; i++) {
+			if (i != p->ActiveAttacker && i != p->Attacker && i != p->NegativeAttacker) break;
+		}
+		PredictBall(field, 4);
+		pos.x = 50;
+		pos.y = p->ball_pre.y;
+		PositionAndStop(field, i, pos);
+		break;
+	case 14:
+		Order(field);
+		//NegativeAttacker
+		if (p->ball_cur.y > GBOT) {
+			PredictBall(field, 2);
+			begin = p->robot[p->NegativeAttacker].position;
+			end = p->ball_pre;
+			alfa = Atan(begin, end);
+			PAngle(field, p->NegativeAttacker, alfa, 125);
+		}
+		else {
+			pos.x = 77;
+			pos.y = 57.5;
+			PositionAndStop(field, p->NegativeAttacker, pos, -45);
+		}
+		//ActiveAttacker
+		shoot(field, p->ActiveAttacker);
+		//Attacker
+		if (p->ball_cur.y < 34) {
+			count = 120;
+			while (count > 0) {
+				Kick(field, p->Attacker, p->ActiveAttacker);
+				count--;
+			}
+		}
+		else {
+			if (p->ball_speed.y > 1) {
+				//PositionBallX(field,p->ActiveAttacker,p->robot[p->ActiveAttacker].position,-100,1);
+				PositionBallX(field, p->Attacker, p->robot[p->ActiveAttacker].position, -100, 1);
+			}
+			else {
+				//PositionBallX(field,p->ActiveAttacker,p->robot[p->ActiveAttacker].position,-70,1);
+				PositionBallX(field, p->Attacker, p->robot[p->ActiveAttacker].position, -70, 1);
+
+			}
+			Kick(field, p->Attacker, CONSTGATE);
+		}
+		/*改过*/
+	 //"Defender"
+		for (i = 1; i < 5; i++) {
+			if (i != p->ActiveAttacker && i != p->Attacker && i != p->NegativeAttacker) break;
+		}
+		PredictBall(field, 4);
+		pos.x = 50;
+		pos.y = p->ball_pre.y;
+		PositionAndStop(field, i, pos);
+		break;
+	case 15:
+		Order(field);
+		if (p->ball_cur.y < GTOP) {
+			PredictBall(field, 2);
+			begin = p->robot[p->NegativeAttacker].position, end = p->ball_pre;
+			alfa = Atan(begin, end);
+			PAngle(field, p->NegativeAttacker, alfa, 125);
+		}
+		else {
+			pos.x = 77; pos.y = 26;
+			PositionAndStop(field, p->NegativeAttacker, pos, -45);
+		}
+		shoot(field, p->ActiveAttacker);
+		if (p->ball_cur.y > 48) {
+			count = 120;
+			while (count > 0) {
+				Kick(field, p->Attacker, p->ActiveAttacker);
+				count--;
+			}
+		}
+		else {
+			if (p->ball_speed.y > 1) {
+				//PositionBallX(field,p->ActiveAttacker,p->robot[p->ActiveAttacker].position,100,1);
+				PositionBallX(field, p->Attacker, p->robot[p->ActiveAttacker].position, 100, 1);
+			}
+			else {
+				//PositionBallX(field,p->ActiveAttacker,p->robot[p->ActiveAttacker].position,70,1);
+				PositionBallX(field, p->Attacker, p->robot[p->ActiveAttacker].position, 70, 1);
+			}
+			Kick(field, p->Attacker, CONSTGATE);
+		}
+		/*改过*/
+		for (i = 1; i < 5; i++) {
+			if (i != p->ActiveAttacker && i != p->Attacker && i != p->NegativeAttacker) break;
+		}
+		PredictBall(field, 4);
+		pos.x = 50;
+		pos.y = p->ball_pre.y;
+		PositionAndStop(field, i, pos);
+		break;
+	case 16:
+		Order(field);
+		shoot(field, p->ActiveAttacker);
+		if (p->ball_cur.x < 92) {
+			count = 120;
+			while (count > 0) {
+				Kick(field, p->Attacker, p->ActiveAttacker);
+				count--;
+			}
+		}
+		else
+			shoot(field, p->Attacker);
+
+		if (p->ball_cur.x < 87 || p->ball_cur.y>66) {
+			count = 100;
+			while (count > 0) {
+				Kick(field, p->NegativeAttacker, p->Attacker);
+				count--;
+			}
+		}
+		else {
+			pos.x = 77; pos.y = 26;
+			PositionAndStop(field, p->NegativeAttacker, pos, 45);
+		}
+		/*改过*/
+		for (i = 1; i < 5; i++) {
+			if (i != p->ActiveAttacker && i != p->Attacker && i != p->NegativeAttacker) break;
+		}
+		PredictBall(field, 4);
+		pos.x = 50;
+		pos.y = p->ball_pre.y;
+		PositionAndStop(field, i, pos);
+		break;
 	}
 }
-void Goliar(Field* field)
+
+/**************************策略*********************************/
+//keeper 守门员守门
+//
+//点球
+//球门球
+//争球
+//任意球
+/***************************************************************/
+
+void Keeper(Field* field, int robot)
+{//先校正姿态，再去拦球
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+	Vector3D go;
+	double OX = GLEFT - (GTOP - GBOT);	// 该点为球门中心 向后移动半个球门
+	double OY = (GTOP + GBOT) / 2;			//球门中心	
+	double ballx = p->ball_cur.x;
+	double bally = p->ball_cur.y;
+	double gx = p->robot[robot].position.x;
+	double gx_outline = GLEFT + 2.2;		//对x坐标的限定，防止离球门线太远了
+	double gx_inline = GLEFT - 1;
+	double gy = p->robot[robot].position.y;		//跑位点,初值为当前位置
+	double goalline = GLEFT + 3;
+	bool notout = true;
+	bool   standby = true;	//限制x 坐标
+	bool   XX = false;	//是否旋转
+
+	if (ballx < GLEFT + 0.7 && bally<BD_BOT + 0.75 && bally>BD_BOT + 0.7 && p->robot[robot].position.y<BD_BOT + 2 && p->robot[robot].position.y>BD_BOT + 1.4 && Distance(p->ball_cur, p->robot[robot].position) < 2.4) {
+		Velocity(field, robot, -125, 125);
+	}
+	else if (ballx < GLEFT + 0.7 && bally<BD_TOP + 0.75 && bally<BD_TOP - 0.7 && p->robot[robot].position.y>BD_TOP - 2 && p->robot[robot].position.y>BD_TOP - 1.4 && Distance(p->ball_cur, p->robot[robot].position) < 2.4) {
+		Velocity(field, robot, 125, -125);
+	}
+	gy = OY + (goalline - OX) * (bally - OY) / (ballx - OX);
+	if (notout) {
+		if (gy > GTOP + 3)
+			gy = GTOP + 3;
+		else if (gy < GBOT - 3)
+			gy = GBOT - 3;
+	}
+	if (standby) {
+		if (gx > gx_outline)
+			gx = gx_outline;
+		else if (gx < gx_inline)
+			gx = gx_inline;
+	}
+	if (fabs(p->ball_speed.y) < 10 && p->ball_cur.x < 15 && p) {
+		if (p->ball_cur.y > BD_TOP - 3) {
+			gx = GLEFT - 0.5;
+			gy = BD_TOP - 0.7;
+		}
+		else if (p->ball_cur.y < BD_BOT + 3) {
+			gx = GLEFT - 0.5;
+			gy = BD_BOT + 0.7;
+		}
+		else  gx = GLEFT + 2.5;
+	}
+	else gx = GLEFT + 2.5;
+	go.x = gx;
+	go.y = gy;
+	GoaliePosition(field, robot, go, 90, 1.5);
+}
+
+void Order(Field* field)
 {
-	double bx = field->ball.position.x;
-	double by = field->ball.position.y;
-	if (bx <= 0)
-	{
-		if (by >= 25)
-			go(&field->selfRobots[0], 0, -106, 21);
-		else if (by <= -25)
-			go(&field->selfRobots[0], 0, -106, -21);
-		else
-			go(&field->selfRobots[0], 0, -106, by);
-	}
-	else
-	{
-		if (bx <= -71.5 && bx >= -115 && by >= -40 && by <= 40)
-		{
-			go(&field->selfRobots[0], 0, bx - 3, by);
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+	int i, j, k, a[4];
+	double dis[4], b[4], temple;
+	double dy = 0;
+	static int record = 2;
+
+	b[0] = dis[0] = Distance(p->robot[1].position, p->ball_cur);
+	b[1] = dis[1] = Distance(p->robot[2].position, p->ball_cur);
+	b[2] = dis[2] = Distance(p->robot[3].position, p->ball_cur);
+	b[3] = dis[3] = Distance(p->robot[4].position, p->ball_cur);
+
+	switch (p->WIB) {
+	case 1:
+	case 4:
+	case 5:
+	case 6:
+	case 7:
+	case 8:
+		for (i = 0; i < 3; i++)
+			for (j = i + 1; j < 4; j++) {
+				if (b[i] > b[j]) {
+					temple = b[i];
+					b[i] = b[j];
+					b[j] = temple;
+				}
+			}
+		for (i = 0; i < 4; i++)
+			for (j = 0; j < 4; j++)
+				if (dis[j] == b[i])
+					a[i] = j + 1;
+
+		p->ActiveAttacker = a[0];
+		p->Attacker = a[1];
+		p->NegativeAttacker = a[2];
+		p->Defender = a[3];
+		break;
+	case 2:
+	case 3:
+		if (p->ball_cur.y > p->robot[0].position.y) {
+			i = p->ActiveAttacker;
+			p->ActiveAttacker = p->NegativeAttacker;
+			p->NegativeAttacker = i;
 		}
-		else
-		{
-			if (by >= 25)
-				go(&field->selfRobots[0], 0, -106, 21);
-			else if (by <= -25)
-				go(&field->selfRobots[0], 0, -106, -21);
-			else
-				go(&field->selfRobots[0], 0, -106, by);
+		break;
+	case 9:
+	case 10:
+	case 11:
+	case 12:
+	case 13:
+
+		if (dis[1] < dis[2]) {
+
+			if (dis[2] <= dis[3]) {
+				i = 2;
+				j = 3;
+				k = 4;
+			}
+			else if (dis[1] <= dis[3]) {
+				i = 2;
+				j = 4;
+				k = 3;
+			}
+			else {
+				i = 4;
+				j = 2;
+				k = 3;
+			}
 		}
+		else {
+
+			if (dis[1] <= dis[3]) {
+				i = 3;
+				j = 2;
+				k = 4;
+			}
+			else if (dis[2] <= dis[3]) {
+				i = 3;
+				j = 4;
+				k = 2;
+			}
+			else {
+				i = 4;
+				j = 3;
+				k = 2;
+			}
+		}
+
+		p->ActiveAttacker = i;
+		p->Attacker = j;
+		p->NegativeAttacker = k;
+		record = p->NegativeAttacker;
+		break;
+	case 14:
+		if (!Within(field, record, 1))
+			p->NegativeAttacker = record;
+
+		else {
+			if (p->ball_speed.z < 0) {
+				dy = 100;
+				for (i = 2; i < 5; i++)
+					if (p->robot[i].position.y < dy) {
+						dy = p->robot[i].position.y;
+						record = i;
+					}
+				p->ActiveAttacker = p->NegativeAttacker;
+				p->NegativeAttacker = record;
+			}
+			else {
+				dy = 0;
+				for (i = 2; i < 5; i++)
+					if (p->robot[i].position.y > dy) {
+						dy = p->robot[i].position.y;
+						record = i;
+					}
+				p->ActiveAttacker = p->NegativeAttacker;
+				p->NegativeAttacker = record;
+			}
+		}
+
+		for (i = 2; i < 5; i++)
+			if (i != p->NegativeAttacker && i != p->ActiveAttacker)
+				p->Attacker = i;
+
+		break;
+	case 15:
+
+		if (!Within(field, record, 1))
+			p->NegativeAttacker = record;
+
+		else {
+			if (p->ball_speed.z < 0) {
+				dy = 100;
+				for (i = 2; i < 5; i++)
+					if (p->robot[i].position.y < dy) {
+						dy = p->robot[i].position.y;
+						record = i;
+					}
+				p->ActiveAttacker = p->NegativeAttacker;
+				p->NegativeAttacker = record;
+			}
+			else {
+				dy = 0;
+				for (i = 2; i < 5; i++)
+					if (p->robot[i].position.y > dy) {
+						dy = p->robot[i].position.y;
+						record = i;
+					}
+				p->ActiveAttacker = p->NegativeAttacker;
+				p->NegativeAttacker = record;
+			}
+		}
+		for (i = 2; i < 5; i++)
+			if (i != p->NegativeAttacker && i != p->ActiveAttacker)
+				p->Attacker = i;
+
+		break;
+	case 16:
+
+		if (dis[1] < dis[2]) {
+
+			if (dis[2] <= dis[3]) {
+				i = 2;
+				j = 3;
+				k = 4;
+			}
+			else if (dis[1] <= dis[3]) {
+				i = 2;
+				j = 4;
+				k = 3;
+			}
+			else {
+				i = 4;
+				j = 2;
+				k = 3;
+			}
+		}
+		else {
+
+			if (dis[1] <= dis[3]) {
+				i = 3;
+				j = 2;
+				k = 4;
+			}
+			else if (dis[2] <= dis[3]) {
+				i = 3;
+				j = 4;
+				k = 2;
+			}
+			else {
+				i = 4;
+				j = 3;
+				k = 2;
+			}
+		}
+
+		p->ActiveAttacker = i;
+		p->Attacker = j;
+		p->NegativeAttacker = k;
+		record = p->NegativeAttacker;
+		break;
 	}
 }
-void keeper(Robot* robot, int rID, Field* field) {
-	double bx, by, rx, ry;
-	double le;
-	int bv[6] = { 3,10,20,30,40,50 };
 
-	PredictBall2(1, field);
 
-	le = 2.0;
-	double X = 110;
-	double Y = 0;
-	rx = robot->position.x;
-	ry = robot->position.y;
 
-	bx = field->ball.position.x;
-	by = field->ball.position.y;
+void FreeBallGame(Field* field) {//争球
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
 
-	if (PBP[1] > 40)
-		PBP[1] = 40;
-	if (PBP[1] < -40)
-		PBP[1] = -40;
-	if (by > 40)
-		by = 40;
-	if (by < -40)
-		by = -40;
-	if (bx > 75 )
-		to(robot, rID, X, PBP[1]);
+}
+void PlaceBallGame(Field* field) {//开中场球
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+	Vector3D pos;
+	pos.x = (GLEFT + GRIGHT) / 2 - 10;
+	pos.y = 41.8060;
+	PredictBall(field, 10);
+	PositionAndStop(field, 3, pos);
+	Kick(field, 4, CONSTGATE);
+	PositionAndThrough(field, 1, p->ball_pre);
+	Keeper(field, 0);
+}
+
+void PenaltyBallGame(Field* field) {//点球
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+	shoot(field, 4);
+}
+void FreeKickGame(Field* field) {//任意球
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+	shoot(field, 4);
+
+}
+void GoalKickGame(Field* field) {//门球
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+	shoot(field, 0);
+}
+
+void Sweep(Field* field, int robot) {
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+	Vector3D pos;
+	int add_time = 0;
+	pos.x = p->ball_cur.x;
+	pos.y = p->ball_cur.y;
+	add_time = (int)(fabs(Distance(p->robot[robot].position, pos) - 3.5) / 1.2);
+	if (add_time > 18) {
+		PredictBall(field, 20);
+		pos.x = p->ball_pre.x;
+		pos.y = p->ball_pre.y;
+		PositionAndStop(field, robot, pos);
+	}
+	else if (add_time == 0) {
+		pos.x = p->ball_cur.x;
+		pos.y = p->ball_cur.y;
+		PositionAndStop(field, robot, pos);
+	}
 	else
-		go(robot, rID, X, by);
+	{
+		PredictBall(field, add_time - 1);
+		pos.x = p->ball_pre.x;
+		pos.y = p->ball_pre.y;
+		PositionAndStop(field, robot, pos);
+	}
+}
 
+int WhoseBall(Field* field) {
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+	double temp1, temp2, dis;
+	int k1, k2;
+
+	temp1 = Distance(p->ball_cur, p->robot[1].position);
+	k1 = 1;
+	for (int i = 2; i < 5; i++) {
+		dis = Distance(p->ball_cur, p->robot[i].position);
+		if (dis < temp1) {
+			temp1 = dis;
+			k1 = i;
+		}
+	}
+
+	temp2 = Distance(p->ball_cur, p->opp[1].position);
+	k1 = 1;
+	for (int i = 2; i < 5; i++) {
+		dis = Distance(p->ball_cur, p->opp[i].position);
+		if (dis < temp2) {
+			temp2 = dis;
+			k2 = i;
+		}
+	}
+	if (temp1 <= temp2) { p->whoseBall = 1; return k1; }
+	else { p->whoseBall = 2; return k2; }
+}
+
+
+
+
+void Action(Field* field) {
+	NormalGame(field);
+	//Mydata* p;
+	//p = (Mydata*)field->userData;
+	/*switch (whichType) {
+	case 0:
+		NormalGame(field);
+		break;
+	case 1:
+		GoalKickGame(field);
+
+		break;
+	case 2:
+		PenaltyBallGame(field);
+		//PlaceBallGame(field);
+		break;
+	case 3:
+		//FreeBallGame(field);
+		//break;
+	case 4:
+		//	FreeKickGame(field);
+			//break;
+	case 5:
+
+	case 6:
+		FreeBallGame(field);
+		break;
+	}*/
 }
